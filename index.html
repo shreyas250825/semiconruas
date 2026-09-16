@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Indigenous Technology Showcase — Continuous Demo</title>
+  <link rel="stylesheet" href="demo-loop.css" />
+</head>
+<body>
+
+  <!-- Cinematic intro -->
+  <div id="intro" aria-hidden="true">
+    <img
+      class="intro-logo"
+      id="intro-logo"
+      src="image.png"
+      alt="Ramaiah University of Applied Sciences"
+    />
+    <div class="intro-line" id="intro-a">Indigenous Technology Showcase</div>
+    <div class="intro-rule" id="intro-rule"></div>
+    <div class="intro-line sub" id="intro-b">6 Projects • 1 Vision</div>
+  </div>
+
+  <!-- Left brand stack: logo up, project text down -->
+  <div id="brand-stack" aria-live="polite">
+    <img
+      id="corner-logo"
+      src="image.png"
+      alt="Ramaiah University of Applied Sciences"
+    />
+    <div id="project-badge">
+      <div class="badge-num" id="badge-num">PROJECT 01</div>
+      <div class="badge-title" id="badge-title">CHIP2STARTUP AR LEARNING PLATFORM</div>
+    </div>
+  </div>
+
+  <!-- Fullscreen stage -->
+  <div id="stage">
+    <iframe
+      id="frame-a"
+      class="demo-frame"
+      title="Demo slot A"
+      allow="autoplay; fullscreen"
+      loading="eager"
+    ></iframe>
+    <iframe
+      id="frame-b"
+      class="demo-frame"
+      title="Demo slot B"
+      allow="autoplay; fullscreen"
+      loading="eager"
+    ></iframe>
+
+    <div id="video-panel" class="video-panel" aria-hidden="true">
+      <video
+        id="demo-video"
+        src="InShot_20260916_164134127.mp4"
+        playsinline
+        muted
+        loop
+        preload="metadata"
+      ></video>
+    </div>
+  </div>
+
+  <div id="transition-veil" aria-hidden="true"></div>
+
+  <div id="progress-rail" aria-hidden="true">
+    <div id="progress-fill"></div>
+  </div>
+
+  <div id="progress-dots" aria-hidden="true"></div>
+
+  <div id="error-toast" role="status"></div>
+
+  <div class="hotzone hotzone-top" id="hotzone-top" aria-hidden="true"></div>
+  <div class="hotzone hotzone-right" id="hotzone-right" aria-hidden="true"></div>
+
+  <!-- Transport + jump-to project strip -->
+  <div id="controls" role="toolbar" aria-label="Demo controls">
+    <div class="ctrl-row" id="jump-row" aria-label="Jump to project"></div>
+    <div class="ctrl-row">
+      <button type="button" class="ctrl-btn" id="btn-prev" title="Previous (←)">←</button>
+      <button type="button" class="ctrl-btn" id="btn-play" title="Play (Space)">▶ Play</button>
+      <button type="button" class="ctrl-btn" id="btn-pause" title="Pause (Space)">⏸ Pause</button>
+      <button type="button" class="ctrl-btn" id="btn-stop" title="Stop (Esc)">⏹ Stop</button>
+      <button type="button" class="ctrl-btn" id="btn-restart" title="Restart">↻ Restart</button>
+      <button type="button" class="ctrl-btn" id="btn-next" title="Next (→)">→</button>
+      <button type="button" class="ctrl-btn" id="btn-fs" title="Fullscreen (F)">⛶</button>
+    </div>
+    <div class="ctrl-hint">Tap a project below · Space · Esc · ← → · F</div>
+  </div>
+
+  <script src="demo-loop.js"></script>
+</body>
+</html>

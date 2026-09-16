@@ -1,0 +1,1296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VenoClot — Device Inspection</title>
+<style>
+  :root{
+    --bg:#080D10;
+    --panel:rgba(16,25,31,0.82);
+    --glass:rgba(22,34,41,0.62);
+    --hair:rgba(168,200,218,0.14);
+    --hair-lit:rgba(168,200,218,0.34);
+    --ink:#EEF3F5;
+    --ink-dim:#8FA0AB;
+    --ink-faint:#5A6C78;
+    --blue:#A9C7DE;
+    --teal:#5FD6CE;
+    --vital:#7DE9A6;
+  }
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:var(--bg);
+    font-family:"Inter","Helvetica Neue",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;color:var(--ink);}
+  #stage{position:fixed;inset:0;}
+  canvas{display:block;touch-action:none;}
+  #vignette{position:fixed;inset:0;pointer-events:none;
+    background:radial-gradient(ellipse 76% 66% at 50% 44%, transparent 38%, rgba(2,5,7,0.7) 100%);}
+  #leaders{position:fixed;inset:0;pointer-events:none;}
+  #tags{position:fixed;inset:0;pointer-events:none;}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    color:var(--ink-faint);font-size:12px;letter-spacing:.08em;text-transform:uppercase;}
+
+  .tag{position:absolute;transform:translate(0,-50%);white-space:nowrap;
+    font-size:12px;line-height:1.35;pointer-events:auto;cursor:pointer;
+    background:rgba(8,13,16,0.9);border:1px solid var(--hair);
+    border-left:2px solid var(--hair-lit);
+    border-radius:4px;padding:5px 11px;
+    transition:opacity .25s, border-color .2s, background .2s;}
+  .tag:hover{background:rgba(20,34,41,0.95);border-left-color:var(--teal);}
+  .tag.sel{border-left-color:var(--teal);background:rgba(24,44,50,0.95);}
+  .tag u{text-decoration:none;color:var(--ink-faint);margin-right:9px;
+    font-variant-numeric:tabular-nums;font-size:11px;}
+  .tag b{font-weight:600;}
+  .tag span{color:var(--ink-dim);font-size:11px;margin-left:9px;}
+
+  header{position:fixed;top:26px;left:30px;max-width:min(340px,54vw);z-index:3;}
+  header h1{margin:0;font-size:22px;font-weight:600;letter-spacing:.2px;}
+  header p{margin:7px 0 0;font-size:12.5px;line-height:1.55;color:var(--ink-dim);}
+  #chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:13px;}
+  #chips i{font-style:normal;font-size:11px;color:var(--ink-dim);
+    border:1px solid var(--hair);border-radius:999px;padding:3px 9px;}
+
+  #panel{position:fixed;top:26px;right:30px;width:228px;background:var(--panel);
+    border:1px solid var(--hair);border-radius:12px;padding:15px 16px;
+    backdrop-filter:blur(12px);z-index:3;}
+  .seg{display:flex;gap:6px;margin-bottom:14px;}
+  .seg button{flex:1;font-size:11.5px;padding:7px 4px;}
+  #panel .head{display:flex;justify-content:space-between;align-items:baseline;
+    font-size:12px;color:var(--ink-dim);margin-bottom:9px;}
+  #panel .head b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums;}
+  input[type=range]{width:100%;accent-color:var(--blue);margin:0;}
+  input[type=range]:disabled{opacity:.35;}
+  .btns{display:flex;gap:7px;margin-top:13px;}
+  button{font:inherit;font-size:12px;color:var(--ink);cursor:pointer;flex:1;
+    background:transparent;border:1px solid var(--hair);border-radius:7px;padding:7px 6px;
+    transition:background .15s,border-color .15s,color .15s;}
+  button:hover{background:rgba(168,200,218,0.1);}
+  button:focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
+  button[aria-pressed=true]{background:rgba(95,214,206,0.16);border-color:rgba(95,214,206,0.5);}
+  #btnReset{margin-top:9px;width:100%;border-color:var(--hair-lit);}
+  .hintline{margin-top:11px;font-size:11px;color:var(--ink-faint);line-height:1.45;}
+
+  #key{position:fixed;bottom:26px;left:30px;font-size:12px;z-index:3;
+    background:var(--panel);border:1px solid var(--hair);border-radius:12px;
+    padding:14px 16px;backdrop-filter:blur(12px);transition:opacity .3s;}
+  #key .cap{color:var(--ink-dim);font-size:11px;margin-bottom:10px;}
+  #key .row{display:flex;align-items:center;gap:9px;margin-bottom:6px;cursor:pointer;
+    padding:2px 4px;margin-left:-4px;border-radius:4px;transition:background .15s;}
+  #key .row:hover{background:rgba(168,200,218,0.09);}
+  #key .row:last-child{margin-bottom:0;}
+  #key i{width:9px;height:9px;border-radius:2px;flex:0 0 auto;}
+  #key em{font-style:normal;color:var(--ink-faint);width:11px;text-align:right;
+    font-variant-numeric:tabular-nums;}
+
+  /* Glassmorphic Inspection HUD */
+  #hud{position:fixed;top:50%;left:30px;transform:translateY(-50%) translateX(-14px);
+    width:326px;background:var(--glass);border:1px solid var(--hair-lit);
+    border-radius:14px;padding:20px 22px;backdrop-filter:blur(20px) saturate(140%);
+    box-shadow:0 20px 60px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.07);
+    opacity:0;pointer-events:none;transition:opacity .3s, transform .3s;z-index:5;}
+  #hud.on{opacity:1;pointer-events:auto;transform:translateY(-50%) translateX(0);}
+  #hud .idx{font-size:11px;color:var(--teal);letter-spacing:.1em;text-transform:uppercase;}
+  #hud h2{margin:8px 0 3px;font-size:19px;font-weight:600;letter-spacing:.1px;}
+  #hud .sub{font-size:12px;color:var(--ink-dim);margin-bottom:14px;}
+  #hud p{margin:0;font-size:13px;line-height:1.62;color:#D3DCE1;}
+  #hud .specs{margin-top:16px;border-top:1px solid var(--hair);padding-top:13px;}
+  #hud .specs div{display:flex;justify-content:space-between;gap:14px;
+    font-size:11.5px;padding:4px 0;}
+  #hud .specs span:first-child{color:var(--ink-faint);}
+  #hud .specs span:last-child{color:var(--ink);text-align:right;
+    font-variant-numeric:tabular-nums;}
+  #hud .close{position:absolute;top:14px;right:14px;width:26px;height:26px;flex:none;
+    padding:0;line-height:1;font-size:15px;color:var(--ink-dim);border-radius:6px;}
+
+  #steps{position:fixed;left:50%;bottom:30px;transform:translateX(-50%);
+    display:flex;gap:10px;background:var(--panel);border:1px solid var(--hair);
+    border-radius:12px;padding:12px 14px;backdrop-filter:blur(12px);
+    opacity:0;pointer-events:none;transition:opacity .3s;z-index:3;}
+  #steps .st{width:186px;}
+  #steps .st b{display:block;font-size:12.5px;font-weight:600;margin-bottom:3px;
+    color:var(--ink-faint);}
+  #steps .st p{margin:0;font-size:11.5px;line-height:1.45;color:var(--ink-dim);}
+  #steps .st .bar{height:2px;background:rgba(168,200,218,0.18);margin-bottom:9px;
+    border-radius:2px;overflow:hidden;}
+  #steps .st .bar u{display:block;height:100%;width:0;background:var(--teal);
+    text-decoration:none;}
+  #steps .st.on b{color:var(--ink);}
+
+  #principle{position:fixed;right:30px;bottom:112px;width:266px;z-index:3;
+    background:var(--panel);border:1px solid var(--hair);border-radius:12px;
+    padding:13px 14px 10px;backdrop-filter:blur(12px);
+    opacity:0;pointer-events:none;transition:opacity .3s;}
+  #principle .cap{color:var(--ink-dim);font-size:11px;margin-bottom:9px;}
+  #principle canvas{width:100%;height:auto;display:block;}
+
+  #foot{position:fixed;bottom:30px;right:30px;color:var(--ink-faint);font-size:11px;z-index:2;}
+
+  @media (max-width:980px){
+    header{max-width:44vw;top:20px;left:20px}
+    header h1{font-size:18px} header p{font-size:12px}
+    #chips{display:none}
+    #panel{width:172px;padding:12px;top:20px;right:20px}
+    #key{font-size:11px;padding:10px 12px;bottom:20px;left:20px}
+    #hud{left:20px;right:20px;width:auto;top:auto;bottom:20px;transform:translateY(14px);
+      padding:16px 18px}
+    #hud.on{transform:translateY(0)}
+    #hud p{font-size:12.5px}
+    #principle{display:none}
+    .tag{font-size:11px;padding:4px 8px}
+    .tag span{display:none}
+    #steps{width:calc(100vw - 40px);overflow-x:auto;bottom:20px}
+    #steps .st{width:150px}
+    #foot{display:none}
+  }
+</style>
+</head>
+<body>
+
+<div id="stage"></div>
+<div id="boot">initialising renderer</div>
+<div id="vignette"></div>
+<svg id="leaders"></svg>
+<div id="tags"></div>
+
+<header>
+  <h1>VenoClot</h1>
+  <p>Point-of-care coagulation analyser. Gold electrodes inside a disposable cuvette
+     are driven with an AC sweep from 1 to 100 kHz; fibrin formation moves the whole
+     impedance spectrum, not just one point on it.</p>
+  <div id="chips">
+    <i>200 µL cuvette</i><i>37 °C PID</i><i>AD5933 · 1–100 kHz</i><i>Result in ~10 min</i>
+  </div>
+</header>
+
+<div id="panel">
+  <button id="btnAuto" aria-pressed="true" style="width:100%;margin-bottom:11px;">Auto-demo: On</button>
+  <div class="seg">
+    <button id="btnEx" aria-pressed="true">Architecture</button>
+    <button id="btnDemo" aria-pressed="false">How it works</button>
+  </div>
+  <div class="head"><label for="ex">Separation</label><b id="exVal">70%</b></div>
+  <input type="range" id="ex" min="0" max="100" value="70" step="1" aria-label="Separation">
+  <div class="btns">
+    <button id="btnSpin" aria-pressed="true">Stop spin</button>
+    <button id="btnFit">Reassemble</button>
+  </div>
+  <button id="btnReset">Reset view</button>
+  <div class="hintline">Runs itself. Click any component, or the panel above, to take over.</div>
+</div>
+
+<div id="key">
+  <div class="cap">Assembly, top to base</div>
+  <div class="row" data-id="upper"><em>1</em><i style="background:#F2F4F1"></i>Upper enclosure</div>
+  <div class="row" data-id="display"><em>2</em><i style="background:#0E1518"></i>OLED display</div>
+  <div class="row" data-id="cuvette"><em>3</em><i style="background:#BFE0DA"></i>Cuvette + electrodes</div>
+  <div class="row" data-id="heater"><em>4</em><i style="background:#AFB7BC"></i>PTC heating element</div>
+  <div class="row" data-id="pogo"><em>5</em><i style="background:#E0BE63"></i>Pogo-pin contacts</div>
+  <div class="row" data-id="pcb"><em>6</em><i style="background:#14493D"></i>Sensing PCB</div>
+  <div class="row" data-id="mcu"><em>7</em><i style="background:#1A3B31"></i>MCU board</div>
+  <div class="row" data-id="battery"><em>8</em><i style="background:#3A4247"></i>Battery + PMIC</div>
+  <div class="row" data-id="lower"><em>9</em><i style="background:#A9C4DA"></i>Base enclosure</div>
+</div>
+
+<div id="hud">
+  <button class="close" id="hudClose" aria-label="Close">×</button>
+  <div class="idx" id="hudIdx">Component 01</div>
+  <h2 id="hudTitle">—</h2>
+  <div class="sub" id="hudSub">—</div>
+  <p id="hudBody">—</p>
+  <div class="specs" id="hudSpecs"></div>
+</div>
+
+<div id="steps">
+  <div class="st" data-step="0"><div class="bar"><u></u></div>
+    <b>Fill the cuvette</b><p>200 µL of whole blood is drawn into the disposable cuvette.</p></div>
+  <div class="st" data-step="1"><div class="bar"><u></u></div>
+    <b>Drop it in</b><p>Pogo pins meet the electrode pads; the ring holds the sample at 37 °C.</p></div>
+  <div class="st" data-step="2"><div class="bar"><u></u></div>
+    <b>Sweep and read</b><p>The AD5933 sweeps 1–100 kHz repeatedly. A spreading spectrum means fibrin.</p></div>
+</div>
+
+<div id="principle">
+  <div class="cap">Multi-frequency signature</div>
+  <canvas id="pcanvas" width="520" height="270"></canvas>
+</div>
+
+<div id="foot">Reference layout — not to scale</div>
+
+<script src="https://unpkg.com/three@0.155.0/build/three.min.js"></script>
+<script>
+if(!window.THREE){
+  document.write('<scr'+'ipt src="https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.min.js"><\/scr'+'ipt>');
+}
+</script>
+<script>
+if(!window.THREE){
+  document.getElementById('boot').textContent = 'could not load three.js — check the connection';
+} else {
+document.getElementById('boot').style.display = 'none';
+
+// ══════════════════════════════════════════ renderer
+const stage = document.getElementById('stage');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x080D10);
+
+const camera = new THREE.PerspectiveCamera(32, innerWidth/innerHeight, 0.05, 140);
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.06;
+if('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
+else renderer.outputEncoding = THREE.sRGBEncoding;
+if('useLegacyLights' in renderer) renderer.useLegacyLights = true;
+stage.appendChild(renderer.domElement);
+
+const SRGB = THREE.SRGBColorSpace || THREE.sRGBEncoding;
+function markSRGB(t){ if('colorSpace' in t) t.colorSpace = SRGB; else t.encoding = THREE.sRGBEncoding; return t; }
+const sstep = (a,b,x)=>{ const t = Math.min(1, Math.max(0,(x-a)/(b-a))); return t*t*(3-2*t); };
+
+// ══════════════════════════════════════════ studio environment
+function studioEnv(){
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 512;
+  const g = c.getContext('2d');
+  const sky = g.createLinearGradient(0,0,0,512);
+  sky.addColorStop(0.00,'#9CB3C1'); sky.addColorStop(0.42,'#41505A');
+  sky.addColorStop(0.54,'#1E262B'); sky.addColorStop(1.00,'#090D10');
+  g.fillStyle = sky; g.fillRect(0,0,1024,512);
+  const box = (x,y,w,h,col,blur)=>{ g.save(); g.filter='blur('+blur+'px)';
+    g.fillStyle=col; g.fillRect(x,y,w,h); g.restore(); };
+  box(140, 18, 330, 168, '#FFFFFF', 40);   // key softbox
+  box(676, 44, 210, 140, '#BFEFEA', 46);   // teal rim
+  box(430,200, 150,  78, '#FFF1DE', 52);   // warm fill
+  box(  0,296,1024,  44, '#4E5E68', 64);   // horizon bounce
+  const t = markSRGB(new THREE.CanvasTexture(c));
+  t.mapping = THREE.EquirectangularReflectionMapping;
+  const pm = new THREE.PMREMGenerator(renderer);
+  pm.compileEquirectangularShader();
+  const env = pm.fromEquirectangular(t).texture;
+  pm.dispose(); t.dispose();
+  return env;
+}
+scene.environment = studioEnv();
+
+// ══════════════════════════════════════════ dark studio lighting
+scene.add(new THREE.AmbientLight(0x8ba3b2, 0.2));
+const keyLight = new THREE.DirectionalLight(0xfff6ea, 1.7);
+keyLight.position.set(4.6, 9.6, 4.4);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(2048,2048);
+keyLight.shadow.camera.left=-5; keyLight.shadow.camera.right=5;
+keyLight.shadow.camera.top=7.5; keyLight.shadow.camera.bottom=-7.5;
+keyLight.shadow.camera.near=1;  keyLight.shadow.camera.far=26;
+keyLight.shadow.bias=-0.0006;   keyLight.shadow.radius=3.5;
+scene.add(keyLight);
+const rimLight = new THREE.DirectionalLight(0x62DCD4, 0.85);   // teal rim
+rimLight.position.set(-5.6, 3.2, -5.2);
+scene.add(rimLight);
+const fillLight = new THREE.PointLight(0xffe6c6, 0.42, 18);
+fillLight.position.set(-3.2, 1.1, 4.2);
+scene.add(fillLight);
+
+const floor = new THREE.Mesh(
+  new THREE.CircleGeometry(13, 72),
+  new THREE.MeshStandardMaterial({color:0x101A20, roughness:0.72, metalness:0.1})
+);
+floor.rotation.x = -Math.PI/2;
+floor.position.y = -3.2;
+floor.receiveShadow = true;
+scene.add(floor);
+
+// soft radial blob used for per-part ambient contact shadows
+const blobTex = (function(){
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d');
+  const rg = g.createRadialGradient(128,128,4,128,128,124);
+  rg.addColorStop(0,'rgba(0,0,0,0.72)');
+  rg.addColorStop(0.45,'rgba(0,0,0,0.34)');
+  rg.addColorStop(1,'rgba(0,0,0,0)');
+  g.fillStyle = rg; g.fillRect(0,0,256,256);
+  return new THREE.CanvasTexture(c);
+})();
+
+// ══════════════════════════════════════════ geometry helpers
+function rrShape(w,d,r){
+  r = Math.min(r, w/2, d/2);
+  const s = new THREE.Shape(), x=-w/2, y=-d/2;
+  s.moveTo(x+r,y);
+  s.lineTo(x+w-r,y);   s.quadraticCurveTo(x+w,y,x+w,y+r);
+  s.lineTo(x+w,y+d-r); s.quadraticCurveTo(x+w,y+d,x+w-r,y+d);
+  s.lineTo(x+r,y+d);   s.quadraticCurveTo(x,y+d,x,y+d-r);
+  s.lineTo(x,y+r);     s.quadraticCurveTo(x,y,x+r,y);
+  return s;
+}
+function centre(geo){
+  geo.computeBoundingBox();
+  const c = new THREE.Vector3(); geo.boundingBox.getCenter(c);
+  geo.translate(-c.x,-c.y,-c.z); return geo;
+}
+// micro-chamfered slab: w along X, d along Z, h along Y
+function slab(w,d,h,r,mat,bev){
+  bev = bev === undefined ? Math.min(0.016, h*0.28) : bev;
+  const geo = new THREE.ExtrudeGeometry(rrShape(w,d,r), {
+    depth: Math.max(h-bev*2, 0.001), bevelEnabled:true,
+    bevelSize:bev, bevelThickness:bev, bevelSegments:5, curveSegments:24});
+  geo.rotateX(-Math.PI/2);
+  const m = new THREE.Mesh(centre(geo), mat);
+  m.castShadow = true; m.receiveShadow = true;
+  return m;
+}
+function wallLoop(w,d,r,wall,h,mat){
+  const outer = rrShape(w,d,r);
+  outer.holes.push(rrShape(w-wall*2, d-wall*2, Math.max(r-wall,0.02)));
+  const geo = new THREE.ExtrudeGeometry(outer, {
+    depth:h-0.024, bevelEnabled:true, bevelSize:0.012, bevelThickness:0.012,
+    bevelSegments:4, curveSegments:24});
+  geo.rotateX(-Math.PI/2);
+  const m = new THREE.Mesh(centre(geo), mat);
+  m.castShadow = true; m.receiveShadow = true;
+  return m;
+}
+function decal(w,h,tex,opacity){
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w,h),
+    new THREE.MeshBasicMaterial({map:tex, transparent:true, depthWrite:false,
+      opacity: opacity === undefined ? 1 : opacity}));
+  m.rotation.x = -Math.PI/2;
+  return m;
+}
+function fastener(mat){
+  const g = new THREE.Group();
+  const head = new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.054,0.028,24), mat);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.05,0.007,10,28), mat);
+  rim.rotation.x = Math.PI/2; rim.position.y = -0.012;
+  const cross1 = new THREE.Mesh(new THREE.BoxGeometry(0.062,0.01,0.013),
+    new THREE.MeshStandardMaterial({color:0x161B1E, roughness:0.45, metalness:0.6}));
+  cross1.position.y = 0.012;
+  const cross2 = cross1.clone(); cross2.rotation.y = Math.PI/2;
+  g.add(head); g.add(rim); g.add(cross1); g.add(cross2);
+  g.castShadow = true;
+  return g;
+}
+
+// ══════════════════════════════════════════ materials
+const M = {
+  // medical-grade polycarbonate: matte body, tight specular clearcoat
+  shellTop: new THREE.MeshPhysicalMaterial({color:0xF2F4F1, roughness:0.52, metalness:0,
+              clearcoat:0.85, clearcoatRoughness:0.16, sheen:0.25,
+              sheenColor:new THREE.Color(0xdfe8ee), envMapIntensity:1.05, specularIntensity:0.6}),
+  shellBot: new THREE.MeshPhysicalMaterial({color:0xA9C4DA, roughness:0.5, metalness:0,
+              clearcoat:0.8, clearcoatRoughness:0.18, envMapIntensity:1.05}),
+  accent:   new THREE.MeshPhysicalMaterial({color:0x88AECC, roughness:0.34, metalness:0,
+              clearcoat:0.9, clearcoatRoughness:0.1}),
+  // optical-grade refractive cuvette wall
+  glass:  new THREE.MeshPhysicalMaterial({color:0xFFFFFF, roughness:0.02, metalness:0,
+            transmission:1, thickness:0.34, ior:1.5, transparent:true,
+            clearcoat:1, clearcoatRoughness:0.02, envMapIntensity:1.5,
+            attenuationColor:new THREE.Color(0xD9F1EC), attenuationDistance:2.2}),
+  // viscous whole blood: wet sheen over a deep, absorbing body
+  blood:  new THREE.MeshPhysicalMaterial({color:0x6B0F13, roughness:0.16, metalness:0,
+            clearcoat:1, clearcoatRoughness:0.06, transmission:0.24, thickness:0.4,
+            ior:1.38, attenuationColor:new THREE.Color(0x3A0406), attenuationDistance:0.18,
+            sheen:0.4, sheenColor:new THREE.Color(0xff6a6a), transparent:true}),
+  ceramic:new THREE.MeshPhysicalMaterial({color:0xE8E2D6, roughness:0.72, metalness:0,
+            clearcoat:0.2, clearcoatRoughness:0.55, envMapIntensity:0.85}),
+  coil:   new THREE.MeshStandardMaterial({color:0xE09A3C, roughness:0.34, metalness:0.75,
+            emissive:0xE0631A, emissiveIntensity:1.35}),
+  solder: new THREE.MeshPhysicalMaterial({color:0x11453A, roughness:0.62, metalness:0.08,
+            clearcoat:0.25, clearcoatRoughness:0.5, envMapIntensity:0.6}),
+  solderB:new THREE.MeshPhysicalMaterial({color:0x163A31, roughness:0.64, metalness:0.08,
+            clearcoat:0.22, clearcoatRoughness:0.5, envMapIntensity:0.6}),
+  copper: new THREE.MeshStandardMaterial({color:0xC08A4E, roughness:0.24, metalness:0.96}),
+  gold:   new THREE.MeshStandardMaterial({color:0xE3C169, roughness:0.13, metalness:1.0,
+            envMapIntensity:1.3}),
+  ic:     new THREE.MeshPhysicalMaterial({color:0x14181A, roughness:0.38, metalness:0.35,
+            clearcoat:0.3, clearcoatRoughness:0.4}),
+  passive:new THREE.MeshStandardMaterial({color:0x2B2723, roughness:0.5, metalness:0.2}),
+  steel:  new THREE.MeshStandardMaterial({color:0xAFB7BC, roughness:0.2, metalness:1.0,
+            envMapIntensity:1.2}),
+  bezel:  new THREE.MeshPhysicalMaterial({color:0x0F1518, roughness:0.28, metalness:0.3,
+            clearcoat:0.7, clearcoatRoughness:0.12}),
+  cell:   new THREE.MeshStandardMaterial({color:0x3A4247, roughness:0.36, metalness:0.6}),
+  dark:   new THREE.MeshStandardMaterial({color:0x090E11, roughness:0.44, metalness:0.2}),
+  rubber: new THREE.MeshStandardMaterial({color:0x1B2023, roughness:0.88, metalness:0.04})
+};
+M.glow = new THREE.MeshBasicMaterial({color:0xFFA24A, transparent:true, opacity:0.34,
+  blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide});
+
+// ══════════════════════════════════════════ canvas textures
+function makeTex(w,h,draw){
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  draw(ctx,w,h);
+  const t = markSRGB(new THREE.CanvasTexture(c));
+  t.anisotropy = 8;
+  return {tex:t, ctx, w, h};
+}
+
+// ── assay model. Blood is dispersive: at low frequency current is forced
+//    around intact cells, at high frequency it passes through them. Clotting
+//    lifts the low-frequency plateau and drags the characteristic frequency
+//    down, so the whole spectrum moves — not just one point on it.
+const R_BASE = 182, R_RISE = 165, CLOT_ONSET = 0.34;
+const F_LO = 1e3, F_HI = 1e5;
+function zAt(f, s){
+  const z0 = 250 + 260*s, zInf = 118 + 42*s, fc = 34e3 - 16e3*s;
+  return zInf + (z0 - zInf) / (1 + Math.pow(f/fc, 0.92));
+}
+
+const OLED = makeTex(512, 180, ()=>{});
+function drawOLED(p){
+  const g = OLED.ctx, w = OLED.w;
+  g.fillStyle = '#05090A'; g.fillRect(0,0,w,OLED.h);
+  const grn = '#7DE9A6';
+  const set = sstep(CLOT_ONSET, 0.92, p);
+  const su = (p * 9) % 1;
+  const fNow = F_LO * Math.pow(F_HI/F_LO, su);
+  g.fillStyle = 'rgba(125,233,166,0.55)';
+  g.font = '600 20px ui-monospace, Menlo, Consolas, monospace';
+  g.fillText('|Z|', 22, 30);
+  g.fillText(p > 0.03 ? (fNow >= 1e4 ? (fNow/1e3).toFixed(0) : (fNow/1e3).toFixed(1)) + ' kHz'
+                      : '1\u2013100 kHz', 64, 30);
+  const secs = Math.round(150 * p);
+  g.textAlign = 'right';
+  g.fillText(String(Math.floor(secs/60)).padStart(2,'0') + ':' +
+             String(secs%60).padStart(2,'0'), w-22, 30);
+  g.textAlign = 'left';
+  g.fillStyle = grn;
+  g.font = '600 62px ui-monospace, Menlo, Consolas, monospace';
+  g.fillText(Math.round(p > 0.03 ? zAt(fNow, set) : zAt(1e4, 0)), 22, 96);
+  g.font = '600 26px ui-monospace, Menlo, Consolas, monospace';
+  g.fillStyle = 'rgba(125,233,166,0.6)';
+  g.fillText('\u03A9', 130, 96);
+  g.font = '600 20px ui-monospace, Menlo, Consolas, monospace';
+  const clotted = p > 0.88;
+  g.fillStyle = clotted ? grn : 'rgba(125,233,166,0.6)';
+  g.fillText(p < 0.05 ? 'INSERT CUVETTE'
+           : p < CLOT_ONSET ? 'SWEEPING \u00B7 NO CLOT'
+           : clotted ? 'CLOT AT 01:52' : 'CLOTTING', 22, 152);
+  const gx = 250, gy = 100, gw = 240, gh = 64;
+  g.strokeStyle = 'rgba(125,233,166,0.18)'; g.lineWidth = 1.5;
+  g.strokeRect(gx, gy, gw, gh);
+  g.save(); g.setLineDash([5,5]);
+  g.strokeStyle = 'rgba(125,233,166,0.32)'; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(gx, gy+gh-8); g.lineTo(gx+gw, gy+gh-8); g.stroke();
+  g.restore();
+  g.beginPath();
+  g.strokeStyle = grn; g.lineWidth = 3; g.lineJoin = 'round';
+  for(let i=0;i<=60;i++){
+    const u = i/60;
+    if(u > p) break;
+    const y = gy + gh - 8 - (gh-16) * sstep(CLOT_ONSET, 0.9, u);
+    i ? g.lineTo(gx + gw*u, y) : g.moveTo(gx + gw*u, y);
+  }
+  g.stroke();
+  OLED.tex.needsUpdate = true;
+}
+drawOLED(1);
+
+function silkTex(label, refs){
+  return makeTex(1024, 620, (g,w,h)=>{
+    g.clearRect(0,0,w,h);
+    g.strokeStyle = 'rgba(198,140,80,0.85)'; g.lineCap = 'round';
+    for(let i=0;i<11;i++){
+      g.lineWidth = 5 + (i%3)*2;
+      const y = 70 + i*46;
+      g.beginPath(); g.moveTo(70,y);
+      g.lineTo(340 + (i%4)*70, y);
+      g.lineTo(430 + (i%4)*70, y + (i%2 ? 58 : -58));
+      g.lineTo(930, y + (i%2 ? 58 : -58));
+      g.stroke();
+    }
+    // exposed gold test pads along both edges
+    g.fillStyle = 'rgba(227,193,105,0.98)';
+    for(let i=0;i<26;i++){
+      const x = 110 + (i%13)*66, y = i < 13 ? 44 : 574;
+      g.beginPath(); g.arc(x,y,11,0,6.284); g.fill();
+    }
+    g.strokeStyle = 'rgba(236,240,239,0.72)'; g.lineWidth = 3;
+    g.strokeRect(300,190,220,220); g.strokeRect(680,250,150,110);
+    g.fillStyle = 'rgba(236,240,239,0.85)';
+    g.font = '600 30px ui-monospace, Menlo, Consolas, monospace';
+    g.fillText(label, 70, 596);
+    g.font = '600 24px ui-monospace, Menlo, Consolas, monospace';
+    (refs || []).forEach(r=> g.fillText(r[0], r[1], r[2]));
+  }).tex;
+}
+const cellTex = makeTex(512, 680, (g,w,h)=>{
+  g.fillStyle = '#2E3539'; g.fillRect(0,0,w,h);
+  g.fillStyle = '#171C1F'; g.fillRect(0,0,w,92);
+  g.fillStyle = '#E4E9EB';
+  g.font = '600 44px "Helvetica Neue", Arial, sans-serif';
+  g.fillText('Li-po  3.7 V', 40, 210);
+  g.font = '400 34px "Helvetica Neue", Arial, sans-serif';
+  g.fillStyle = '#A5B0B6';
+  g.fillText('1800 mAh', 40, 262);
+  g.fillText('VC-PWR-01', 40, 312);
+  g.strokeStyle = '#6E787E'; g.lineWidth = 4;
+  g.strokeRect(40,380,190,190);
+  g.fillStyle = '#6E787E';
+  for(let i=0;i<64;i++){
+    if((i*7)%3) g.fillRect(52 + (i%8)*22, 392 + Math.floor(i/8)*22, 16, 16);
+  }
+}).tex;
+
+// ══════════════════════════════════════════ parts
+const parts = [];
+const byId = {};
+function addPart(obj, x, homeY, z, openY, id, num, name, note){
+  obj.position.set(x, homeY, z);
+  obj.userData = {home: obj.position.clone(), rise: openY-homeY, extraY:0,
+                  dim:0, dimGoal:0, id, num, name, note};
+  scene.add(obj); parts.push(obj); byId[id] = obj;
+  return obj;
+}
+const W = 2.1, D = 2.9, R = 0.34;
+const CHAM_Z = -0.46, DISP_Z = 0.76;
+let bloodFilm, bloodDrop, statusLed, lightPipe, cuvette, pogoPart, coilGlow = [];
+
+// ── 9 · Base enclosure + PMIC
+{
+  const g = new THREE.Group();
+  const walls = wallLoop(W, D, R, 0.1, 0.52, M.shellBot); walls.position.y = 0.07; g.add(walls);
+  const fl = slab(W, D, 0.12, R, M.shellBot); fl.position.y = -0.25; g.add(fl);
+  const port = slab(0.34, 0.06, 0.13, 0.055, M.dark);
+  port.position.set(0, 0.06, -D/2 + 0.03); g.add(port);
+  [[-0.72,-1.15],[0.72,-1.15],[-0.72,1.15],[0.72,1.15]].forEach(([x,z])=>{
+    const f = new THREE.Mesh(new THREE.CylinderGeometry(0.11,0.13,0.06,28), M.rubber);
+    f.position.set(x,-0.34,z); f.castShadow = true; g.add(f);
+  });
+  [[-0.78,-1.22],[0.78,-1.22],[-0.78,1.22],[0.78,1.22]].forEach(([x,z])=>{
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(0.11,0.115,0.42,24), M.shellBot);
+    b.position.set(x,0.05,z); b.castShadow = true; b.receiveShadow = true; g.add(b);
+    const s = fastener(M.steel); s.position.set(x,0.27,z); g.add(s);
+  });
+  addPart(g, 0, -0.45, 0, -1.95, 'lower', 9, 'Base enclosure', 'power + charging');
+}
+
+// ── 8 · Battery + PMIC
+{
+  const g = new THREE.Group();
+  g.add(slab(0.78, 1.05, 0.26, 0.1, M.cell));
+  const lab = decal(0.6, 0.82, cellTex); lab.position.y = 0.132; g.add(lab);
+  [-0.19, 0.19].forEach((x,i)=>{
+    const t = slab(0.14, 0.1, 0.03, 0.015, i ? M.copper : M.steel);
+    t.position.set(x, 0.02, 0.57); g.add(t);
+  });
+  const lead = new THREE.Mesh(new THREE.TorusGeometry(0.1,0.018,12,32,Math.PI), M.dark);
+  lead.position.set(0,0.03,0.63); lead.rotation.set(Math.PI/2,0,0); g.add(lead);
+  // PMIC daughterboard with LDOs
+  const pm = slab(0.44, 0.3, 0.045, 0.03, M.solderB);
+  pm.position.set(0, 0.16, -0.62); g.add(pm);
+  [[-0.1,-0.62],[0.08,-0.66]].forEach(([x,z])=>{
+    const ldo = slab(0.1,0.08,0.04,0.01,M.ic); ldo.position.set(x,0.2,z); g.add(ldo);
+  });
+  addPart(g, 0, -0.52, -0.05, -1.2, 'battery', 8, 'Battery + PMIC', '3.7 V Li-po');
+}
+
+// ── 7 · MCU board
+{
+  const g = new THREE.Group();
+  g.add(slab(1.3, 0.78, 0.05, 0.08, M.solderB));
+  const silk = decal(1.3, 0.78, silkTex('VC-MCU R1', [['U3',300,178],['J1',680,238]]), 0.85);
+  silk.position.y = 0.027; g.add(silk);
+  const chip = slab(0.3, 0.3, 0.062, 0.01, M.ic); chip.position.set(-0.14, 0.058, 0.02); g.add(chip);
+  for(let i=0;i<28;i++){
+    const side = Math.floor(i/7), k = (i%7 - 3) * 0.043, off = 0.175;
+    const p = new THREE.Mesh(new THREE.BoxGeometry(0.026,0.012,0.05), M.steel);
+    if(side===0) p.position.set(-0.14+k, 0.033, 0.02+off);
+    if(side===1) p.position.set(-0.14+k, 0.033, 0.02-off);
+    if(side===2){ p.position.set(-0.14+off, 0.033, 0.02+k); p.rotation.y = Math.PI/2; }
+    if(side===3){ p.position.set(-0.14-off, 0.033, 0.02+k); p.rotation.y = Math.PI/2; }
+    g.add(p);
+  }
+  const xt = slab(0.16,0.1,0.05,0.02,M.steel); xt.position.set(0.24,0.05,-0.2); g.add(xt);
+  const rg = slab(0.12,0.14,0.05,0.012,M.ic);  rg.position.set(0.5,0.05,-0.05); g.add(rg);
+  for(let i=0;i<6;i++){
+    const pin = new THREE.Mesh(new THREE.BoxGeometry(0.022,0.12,0.022), M.gold);
+    pin.position.set(0.14 + i*0.055, 0.082, 0.3); g.add(pin);
+  }
+  for(let i=0;i<9;i++){
+    const r0 = slab(0.05,0.028,0.018,0.005,M.passive);
+    r0.position.set(-0.55 + (i%3)*0.08, 0.036, -0.28 + Math.floor(i/3)*0.09); g.add(r0);
+  }
+  addPart(g, 0, -0.17, -0.02, -0.58, 'mcu', 7, 'MCU board', 'kinetic classifier');
+}
+
+// ── 6 · Sensing PCB — AD5933 + AD8606 front end
+{
+  const g = new THREE.Group();
+  g.add(slab(1.52, 0.94, 0.05, 0.09, M.solder));
+  const silk = decal(1.52, 0.94,
+    silkTex('VC-SENSE R2', [['U1 AD5933',290,178],['U2 AD8606',676,238]]), 0.9);
+  silk.position.y = 0.027; g.add(silk);
+  // AD5933 impedance converter, 16-lead
+  const afe = slab(0.3, 0.3, 0.058, 0.01, M.ic); afe.position.set(-0.06,0.054,0); g.add(afe);
+  for(let i=0;i<16;i++){
+    const side = Math.floor(i/8), k = (i%8 - 3.5)*0.035;
+    const p = new THREE.Mesh(new THREE.BoxGeometry(0.022,0.01,0.045), M.steel);
+    p.position.set(-0.06+k, 0.031, side ? 0.185 : -0.185);
+    g.add(p);
+  }
+  // two AD8606 packages: excitation buffer + external TIA
+  [[0.36,0.26],[0.36,-0.04]].forEach(([x,z])=>{
+    const op = slab(0.14,0.11,0.048,0.008,M.ic); op.position.set(x,0.049,z); g.add(op);
+    for(let i=0;i<8;i++){
+      const side = Math.floor(i/4), k = (i%4 - 1.5)*0.032;
+      const p = new THREE.Mesh(new THREE.BoxGeometry(0.018,0.008,0.032), M.steel);
+      p.position.set(x+k, 0.028, z + (side ? 0.068 : -0.068));
+      g.add(p);
+    }
+  });
+  // calibration resistors for the gain-factor step
+  [[0.36,-0.28],[0.46,-0.28]].forEach(([x,z])=>{
+    const rc = slab(0.085,0.05,0.024,0.006,M.passive); rc.position.set(x,0.038,z); g.add(rc);
+  });
+  const elec = new THREE.Mesh(new THREE.CylinderGeometry(0.075,0.075,0.13,28), M.steel);
+  elec.position.set(-0.58,0.09,-0.26); elec.castShadow = true; g.add(elec);
+  const can = slab(0.34,0.24,0.085,0.018,M.steel); can.position.set(-0.5,0.065,0.24); g.add(can);
+  // exposed gold test pads
+  for(let i=0;i<8;i++){
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.028,0.028,0.008,20), M.gold);
+    pad.position.set(-0.68 + i*0.075, 0.03, 0.4); g.add(pad);
+  }
+  for(let i=0;i<12;i++){
+    const r0 = slab(0.05,0.028,0.018,0.005,M.passive);
+    r0.position.set(-0.66 + (i%4)*0.075, 0.036, -0.34 + Math.floor(i/4)*0.07); g.add(r0);
+  }
+  addPart(g, 0, 0.07, -0.02, 0.05, 'pcb', 6, 'Sensing PCB', 'AD5933 + AD8606');
+}
+
+// ── 5 · Pogo-pin contacts
+{
+  const g = new THREE.Group();
+  const block = slab(0.62, 0.3, 0.07, 0.03, M.dark); g.add(block);
+  [-0.2, 0.2].forEach(x=>{
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.038,0.038,0.1,24), M.gold);
+    barrel.position.set(x, 0.05, 0);
+    barrel.castShadow = true;
+    const plunger = new THREE.Mesh(new THREE.CylinderGeometry(0.024,0.024,0.09,20), M.gold);
+    plunger.position.set(x, 0.12, 0);
+    const crown = new THREE.Mesh(new THREE.SphereGeometry(0.028,20,14), M.gold);
+    crown.position.set(x, 0.165, 0);
+    const spring = new THREE.Mesh(new THREE.TorusGeometry(0.032,0.006,8,24), M.steel);
+    spring.rotation.x = Math.PI/2; spring.position.set(x, 0.085, 0);
+    g.add(barrel); g.add(plunger); g.add(crown); g.add(spring);
+  });
+  pogoPart = addPart(g, 0, 0.11, CHAM_Z, 0.62, 'pogo', 5, 'Pogo-pin contacts', 'gold spring, ×2');
+}
+
+// ── 4 · PTC heating element (DFRobot FIT0844-style pad + leads)
+{
+  const g = new THREE.Group();
+
+  // flat rectangular PTC pad
+  const pad = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.06, 0.46), M.steel);
+  pad.castShadow = true; pad.receiveShadow = true;
+  g.add(pad);
+
+  // dark thin adhesive backing visible around the pad's underside edge
+  const backing = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.012, 0.48), M.dark);
+  backing.position.y = -0.036;
+  g.add(backing);
+
+  const wireMatRed   = new THREE.MeshStandardMaterial({color:0xb5342e, roughness:0.55, metalness:0.05});
+  const wireMatBlack = new THREE.MeshStandardMaterial({color:0x141414, roughness:0.55, metalness:0.05});
+
+  function bentWire(pts, radius, material){
+    const curve = new THREE.CatmullRomCurve3(pts.map(p=> new THREE.Vector3(...p)));
+    const geo = new THREE.TubeGeometry(curve, 24, radius, 8, false);
+    const m = new THREE.Mesh(geo, material);
+    m.castShadow = true;
+    return m;
+  }
+
+  // two loosely bent leads exiting the same short edge, echoing the reference photo
+  const redWire = bentWire([
+    [-0.2, 0.03, 0.23], [-0.27, 0.13, 0.33], [-0.18, 0.24, 0.44], [-0.05, 0.22, 0.56]
+  ], 0.016, wireMatRed);
+  const blackWire = bentWire([
+    [-0.06, 0.03, 0.23], [-0.08, 0.17, 0.35], [0.04, 0.26, 0.47], [0.12, 0.22, 0.58]
+  ], 0.016, wireMatBlack);
+  g.add(redWire); g.add(blackWire);
+
+  addPart(g, 0, 0.33, CHAM_Z, 1.02, 'heater', 4, 'PTC heating element', 'DFRobot FIT0844, 5 V');
+}
+
+// ── 3 · Sample cuvette + gold electrode strips
+{
+  const g = new THREE.Group();
+  const body = slab(0.76, 0.56, 0.58, 0.07, M.glass, 0.014);
+  body.castShadow = false;            // transmissive walls shouldn't cast a hard shadow
+  g.add(body);
+  const cap = slab(0.8, 0.6, 0.055, 0.08, M.accent); cap.position.y = 0.31; g.add(cap);
+  const inlet = new THREE.Mesh(new THREE.CylinderGeometry(0.072,0.094,0.09,32), M.accent);
+  inlet.position.y = 0.36; inlet.castShadow = true; g.add(inlet);
+  const tab = slab(0.22, 0.1, 0.05, 0.02, M.accent); tab.position.set(0.45, 0.3, 0); g.add(tab);
+  // gold-plated electrode strips down the inner walls, plus external pads
+  [-1, 1].forEach(s=>{
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.44, 0.3), M.gold);
+    strip.position.set(s*0.29, -0.02, 0);
+    g.add(strip);
+    const riser = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.12, 0.09), M.gold);
+    riser.position.set(s*0.29, 0.26, 0);
+    g.add(riser);
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,0.02,24), M.gold);
+    pad.position.set(s*0.2, -0.285, 0);
+    g.add(pad);
+  });
+  bloodFilm = slab(0.58, 0.4, 0.07, 0.03, M.blood); bloodFilm.position.y = -0.21; g.add(bloodFilm);
+  bloodDrop = new THREE.Mesh(new THREE.SphereGeometry(0.13,32,24), M.blood);
+  bloodDrop.scale.set(1,0.7,1); bloodDrop.position.y = -0.1; g.add(bloodDrop);
+  cuvette = addPart(g, 0, 0.44, CHAM_Z, 1.58, 'cuvette', 3, 'Cuvette + electrodes', '200 µL disposable');
+}
+
+// ── 2 · OLED display
+{
+  const g = new THREE.Group();
+  g.add(slab(1.34, 0.46, 0.07, 0.05, M.bezel));
+  const face = decal(1.06, 0.373, OLED.tex); face.position.y = 0.038; g.add(face);
+  const flex = slab(0.5, 0.24, 0.012, 0.02,
+    new THREE.MeshStandardMaterial({color:0xB2762E, roughness:0.45, metalness:0.25}));
+  flex.position.set(0,-0.028,-0.33); g.add(flex);
+  statusLed = new THREE.Mesh(new THREE.SphereGeometry(0.032,20,14),
+    new THREE.MeshBasicMaterial({color:0x9CF7B4}));
+  statusLed.position.set(0.76,0.03,0); g.add(statusLed);
+  addPart(g, 0, 0.70, DISP_Z, 2.22, 'display', 2, 'OLED display', 'sweep + triage flags');
+}
+
+// ── 1 · Upper enclosure
+{
+  const g = new THREE.Group();
+  const walls = wallLoop(W, D, R, 0.1, 0.74, M.shellTop); walls.position.y = -0.09; g.add(walls);
+  const top = slab(W, D, 0.14, R, M.shellTop); top.position.y = 0.35; g.add(top);
+  const win = slab(1.42, 0.54, 0.028, 0.06, M.bezel); win.position.set(0,0.42,DISP_Z); g.add(win);
+  const recess = slab(0.98, 0.78, 0.04, 0.1, M.accent); recess.position.set(0,0.42,CHAM_Z); g.add(recess);
+  const slot = slab(0.82, 0.62, 0.05, 0.07, M.dark); slot.position.set(0,0.43,CHAM_Z); g.add(slot);
+  // quick-latch tab beside the access port
+  const latch = slab(0.26, 0.1, 0.05, 0.025, M.accent);
+  latch.position.set(0.62, 0.43, CHAM_Z); g.add(latch);
+  const btn = new THREE.Mesh(new THREE.CylinderGeometry(0.19,0.2,0.08,48), M.accent);
+  btn.position.set(0,0.44,0.15); btn.castShadow = true; g.add(btn);
+  const btnTop = new THREE.Mesh(new THREE.SphereGeometry(0.19,40,20,0,6.284,0,0.52), M.accent);
+  btnTop.position.set(0,0.46,0.15); g.add(btnTop);
+  lightPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.038,0.038,0.05,24),
+    new THREE.MeshStandardMaterial({color:0xC9F5D6, roughness:0.18, metalness:0,
+      emissive:0x2E7A46, emissiveIntensity:0.6}));
+  lightPipe.position.set(0.78,0.43,DISP_Z); g.add(lightPipe);
+  [[-0.78,-1.22],[0.78,-1.22],[-0.78,1.22],[0.78,1.22]].forEach(([x,z])=>{
+    const s = new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.09,0.06,24), M.shellTop);
+    s.position.set(x,0.4,z); s.receiveShadow = true; g.add(s);
+    const f = fastener(M.steel); f.position.set(x,0.44,z); g.add(f);
+  });
+  for(let i=0;i<5;i++){
+    const v = slab(0.028,0.34,0.02,0.012,M.dark);
+    v.position.set(W/2-0.004, 0.05, -0.55 + i*0.16); g.add(v);
+  }
+  addPart(g, 0, 0.28, 0, 3.05, 'upper', 1, 'Upper enclosure', 'moulded polycarbonate');
+}
+
+// ══════════════════════════════════════════ per-part material isolation
+// Every mesh gets its own material instance so one part can be dimmed
+// without touching the rest of the assembly.
+parts.forEach(p=>{
+  p.traverse(o=>{
+    if(!o.isMesh) return;
+    o.material = o.material.clone();
+    o.userData.baseOpacity = o.material.opacity;
+    o.userData.baseTransparent = o.material.transparent;
+    o.userData.baseEmissive = o.material.emissiveIntensity;
+  });
+});
+
+// per-part soft contact shadow, sized from its own footprint
+const shadowBox = new THREE.Box3(), shadowSize = new THREE.Vector3();
+parts.forEach(p=>{
+  shadowBox.setFromObject(p); shadowBox.getSize(shadowSize);
+  const s = new THREE.Mesh(
+    new THREE.PlaneGeometry(shadowSize.x*1.9 + 0.3, shadowSize.z*1.9 + 0.3),
+    new THREE.MeshBasicMaterial({map:blobTex, transparent:true, depthWrite:false, opacity:0.5})
+  );
+  s.rotation.x = -Math.PI/2;
+  s.position.y = floor.position.y + 0.004;
+  scene.add(s);
+  p.userData.contact = s;
+});
+
+// ══════════════════════════════════════════ inspection content
+const INFO = {
+  upper: {sub:'Injection-moulded polycarbonate',
+    body:'Custom injection-moulded biosafe polycarbonate housing with a quick-latch cuvette access port. The port opens without tools so a used cartridge can be ejected and replaced between patients, and the shell geometry keeps the centre of gravity low so the unit stays put on a ward trolley.',
+    specs:[['Material','Medical-grade PC'],['Access','Quick-latch port'],['Seal','IP-rated splash'],['Finish','Matte, wipe-down']]},
+  lower: {sub:'Base enclosure and power bay',
+    body:'The base carries the cell, the charge inlet and the mass of the instrument. Weighting the lowest layer gives the low-centre-of-gravity stabilisation that stops a bench knock from disturbing a running measurement — mechanical vibration shows up directly in an impedance trace.',
+    specs:[['Material','Medical-grade PC'],['Charging','USB-C inlet'],['Feet','Damped elastomer'],['Fasteners','4 × M2 captive']]},
+  display: {sub:'Low-latency graphical readout',
+    body:'Shows real-time 1–100 kHz impedance sweep progress, elapsed clotting time and immediate VICC triage flags. The operator sees the spectrum moving as it happens rather than waiting for a single end-of-test number, so an abnormal trace can be acted on before the run completes.',
+    specs:[['Type','Monochrome OLED'],['Shows','|Z|, f, elapsed, flag'],['Latency','Sub-frame update'],['Flags','VICC triage']]},
+  cuvette: {sub:'200 µL disposable cartridge',
+    body:'A 200 µL disposable optical and electrical cuvette carrying dual gold electrodes. Gold minimises polarisation impedance at the low-frequency end of the sweep, where a base metal would contribute a large series artefact. The cartridge is the only part that touches blood, so the instrument itself never needs decontamination.',
+    specs:[['Volume','200 µL'],['Electrodes','Dual gold-plated'],['Body','Optical-grade, IOR 1.5'],['Use','Single patient']]},
+  heater: {sub:'Closed-loop 37 °C incubation',
+    body:'A self-regulating PTC heating pad (DFRobot FIT0844) sits directly beneath the cuvette, driven from the 5 V rail with an NTC thermistor closing the loop. Holding the sample at 37 °C eliminates ambient temperature as a variable in the enzymatic clotting cascade — reaction kinetics are strongly temperature-dependent, and blood conductivity itself drifts about 2 % per °C.',
+    specs:[['Part','DFRobot FIT0844'],['Type','PTC self-regulating'],['Supply','5 V'],['Sensor','Embedded NTC']]},
+  pogo: {sub:'Cartridge-to-instrument interface',
+    body:'Gold-plated spring contacts provide a low-contact-resistance coupling between the disposable cartridge and the measurement front-end. Contact resistance sits in series with the sample, so any variation between insertions would read as a change in the measurement — plating and spring preload keep it small and repeatable.',
+    specs:[['Plating','Hard gold over nickel'],['Count','2 (drive + sense)'],['Travel','Sprung, preloaded'],['Rating','> 10 000 cycles']]},
+  pcb: {sub:'AD5933 + AD8606 spectrometer',
+    body:'A 1–100 kHz AC impedance spectrometer built on the AD5933, with AD8606 front-end buffers providing the excitation drive and transimpedance amplification plus gain calibration against an on-board reference resistor. Driving AC rather than DC avoids electrode polarisation, and sweeping the band captures dielectric phase shifts across the whole dispersion.',
+    specs:[['Converter','AD5933'],['Front end','2 × AD8606'],['Band','1–100 kHz'],['Calibration','On-board R_CAL']]},
+  mcu: {sub:'Embedded kinetic classifier',
+    body:'The embedded controller runs a lightweight kinetic classifier over the incoming sweeps, detecting the fibrin-polymerisation plateau in real time instead of waiting out a fixed twenty-minute window. Clot time is reported the moment the curve flattens, which is what turns a lab assay into a bedside one.',
+    specs:[['Role','Sweep control + classify'],['Method','Plateau detection'],['Output','Clot time, triage flag'],['Link','I²C to AD5933']]},
+  battery: {sub:'Cell and power management',
+    body:'A 3.7 V rechargeable lithium-polymer cell with regulated low-noise LDOs isolating the analog front end from supply ripple. Impedance readings sit in the hundreds of ohms at millivolt scale, so switching noise on the rail would land directly in the measurement — the LDOs buy that headroom back.',
+    specs:[['Cell','3.7 V Li-po, 1800 mAh'],['Regulation','Low-noise LDO'],['Isolation','Separate analog rail'],['Runtime','Full clinic session']]}
+};
+
+// ══════════════════════════════════════════ labels
+const tagHost = document.getElementById('tags');
+const svg = document.getElementById('leaders');
+const tagEls = parts.slice().sort((a,b)=> a.userData.num - b.userData.num).map(p=>{
+  const el = document.createElement('div');
+  el.className = 'tag';
+  el.innerHTML = '<u>' + p.userData.num + '</u><b>' + p.userData.name + '</b>' +
+                 (p.userData.note ? '<span>' + p.userData.note + '</span>' : '');
+  el.addEventListener('click', ()=> focusPart(p));
+  tagHost.appendChild(el);
+  const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+  line.setAttribute('stroke','rgba(168,200,218,0.3)');
+  line.setAttribute('stroke-width','1');
+  svg.appendChild(line);
+  return {el, line, part:p, y:0, px:0, py:0, hidden:false};
+});
+
+const anchor = new THREE.Vector3();
+const GAP = 30;
+function placeTags(labelVis){
+  const gutter = innerWidth < 980 ? innerWidth - 168 : innerWidth * 0.645;
+  tagEls.forEach(o=>{
+    o.part.getWorldPosition(anchor);
+    anchor.project(camera);
+    o.hidden = anchor.z > 1 || labelVis < 0.02;
+    o.px = (anchor.x*0.5+0.5)*innerWidth;
+    o.py = (-anchor.y*0.5+0.5)*innerHeight;
+    o.y  = o.py;
+  });
+  // de-clump: enforce a minimum vertical gap, then clamp back into view
+  const live = tagEls.filter(o=>!o.hidden).sort((a,b)=> a.y - b.y);
+  const top = 96, bottom = innerHeight - 96;
+  for(let i=1;i<live.length;i++)
+    if(live[i].y - live[i-1].y < GAP) live[i].y = live[i-1].y + GAP;
+  if(live.length && live[live.length-1].y > bottom){
+    live[live.length-1].y = bottom;
+    for(let i=live.length-2;i>=0;i--)
+      if(live[i+1].y - live[i].y < GAP) live[i].y = live[i+1].y - GAP;
+  }
+  if(live.length && live[0].y < top){
+    live[0].y = top;
+    for(let i=1;i<live.length;i++)
+      if(live[i].y - live[i-1].y < GAP) live[i].y = live[i-1].y + GAP;
+  }
+  tagEls.forEach(o=>{
+    o.el.style.display = o.hidden ? 'none' : 'block';
+    o.line.style.display = o.hidden ? 'none' : 'block';
+    if(o.hidden) return;
+    const own = focused ? (o.part === focused ? 1 : 0.28) : 1;
+    o.el.classList.toggle('sel', o.part === focused);
+    o.el.style.opacity = labelVis * own;
+    o.el.style.left = gutter + 'px';
+    o.el.style.top  = o.y + 'px';
+    o.line.setAttribute('x1', o.px + 10); o.line.setAttribute('y1', o.py);
+    o.line.setAttribute('x2', gutter - 8); o.line.setAttribute('y2', o.y);
+    o.line.setAttribute('stroke','rgba(168,200,218,' + (0.3*labelVis*own).toFixed(2) + ')');
+  });
+}
+
+// ══════════════════════════════════════════ camera
+const camNow  = {yaw:0.55, pitch:0.24, dist:9.6, target:new THREE.Vector3(0,0.35,0)};
+const camGoal = {yaw:0.55, pitch:0.24, dist:9.6, target:new THREE.Vector3(0,0.35,0)};
+let dragging = false, lx = 0, ly = 0, moved = 0;
+function placeCamera(){
+  camera.position.set(
+    camNow.target.x + camNow.dist * Math.sin(camNow.yaw) * Math.cos(camNow.pitch),
+    camNow.target.y + camNow.dist * Math.sin(camNow.pitch),
+    camNow.target.z + camNow.dist * Math.cos(camNow.yaw) * Math.cos(camNow.pitch));
+  camera.lookAt(camNow.target);
+}
+const cv = renderer.domElement;
+cv.addEventListener('pointerdown', e=>{
+  dragging = true; moved = 0; lx = e.clientX; ly = e.clientY;
+  cv.setPointerCapture(e.pointerId);
+});
+cv.addEventListener('pointerup', e=>{
+  dragging = false;
+  try{ cv.releasePointerCapture(e.pointerId); }catch(_){}
+  if(moved < 6) pickAt(e.clientX, e.clientY);
+});
+cv.addEventListener('pointercancel', ()=> dragging = false);
+cv.addEventListener('pointermove', e=>{
+  if(!dragging) return;
+  moved += Math.abs(e.clientX-lx) + Math.abs(e.clientY-ly);
+  camGoal.yaw   -= (e.clientX-lx)*0.006;
+  camGoal.pitch  = Math.max(-0.05, Math.min(1.05, camGoal.pitch + (e.clientY-ly)*0.005));
+  camNow.yaw    -= (e.clientX-lx)*0.006;
+  camNow.pitch   = camGoal.pitch;
+  lx = e.clientX; ly = e.clientY;
+  if(moved > 6){ setAutoPlay(false); setSpin(false); }
+});
+cv.addEventListener('wheel', e=>{
+  camGoal.dist = Math.max(0.9, Math.min(20, camGoal.dist + e.deltaY*0.005));
+  e.preventDefault();
+}, {passive:false});
+
+// ══════════════════════════════════════════ click to inspect
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+let focused = null;
+const hud = document.getElementById('hud');
+
+function pickAt(cx, cy){
+  setAutoPlay(false);
+  ndc.x = (cx/innerWidth)*2 - 1;
+  ndc.y = -(cy/innerHeight)*2 + 1;
+  raycaster.setFromCamera(ndc, camera);
+  const hits = raycaster.intersectObjects(parts, true);
+  if(!hits.length){ clearFocus(); return; }
+  let o = hits[0].object;
+  while(o && parts.indexOf(o) === -1) o = o.parent;
+  o ? focusPart(o) : clearFocus();
+}
+
+const focusBox = new THREE.Box3(), focusSize = new THREE.Vector3();
+function focusPart(p){
+  focused = p;
+  if(mode === 'exploded' && target < 0.45){        // open the stack so it can be seen
+    target = 0.7; slider.value = 70; readout.textContent = '70%';
+  }
+  setSpin(false);
+  focusBox.setFromObject(p); focusBox.getSize(focusSize);
+  camGoal.dist = Math.max(1.15, focusSize.length() * 1.9);
+  camGoal.pitch = 0.2;
+  parts.forEach(q=> q.userData.dimGoal = q === p ? 0 : 1);
+  const info = INFO[p.userData.id] || {sub:'', body:'', specs:[]};
+  document.getElementById('hudIdx').textContent =
+    'Component ' + String(p.userData.num).padStart(2,'0');
+  document.getElementById('hudTitle').textContent = p.userData.name;
+  document.getElementById('hudSub').textContent = info.sub;
+  document.getElementById('hudBody').textContent = info.body;
+  document.getElementById('hudSpecs').innerHTML =
+    (info.specs || []).map(s=> '<div><span>' + s[0] + '</span><span>' + s[1] + '</span></div>').join('');
+  hud.classList.add('on');
+}
+function clearFocus(){
+  if(!focused) return;
+  focused = null;
+  parts.forEach(q=> q.userData.dimGoal = 0);
+  camGoal.dist = mode === 'demo' ? 6.4 : 9.6;
+  camGoal.pitch = mode === 'demo' ? 0.2 : 0.24;
+  camGoal.target.set(0, mode === 'demo' ? 0.35 : 0.35, 0);
+  hud.classList.remove('on');
+}
+document.getElementById('hudClose').addEventListener('click', ()=>{ setAutoPlay(false); clearFocus(); });
+document.getElementById('btnReset').addEventListener('click', ()=>{
+  setAutoPlay(false);
+  clearFocus();
+  camGoal.yaw = 0.55; camGoal.pitch = 0.24;
+  camGoal.dist = mode === 'demo' ? 6.4 : 9.6;
+  camGoal.target.set(0, 0.35, 0);
+  camNow.yaw = camGoal.yaw;
+});
+document.querySelectorAll('#key .row').forEach(row=>{
+  row.addEventListener('click', ()=>{
+    setAutoPlay(false);
+    const p = byId[row.getAttribute('data-id')];
+    if(p) focusPart(p);
+  });
+});
+addEventListener('keydown', e=>{ if(e.key === 'Escape'){ setAutoPlay(false); clearFocus(); } });
+
+// ══════════════════════════════════════════ principle chart
+const pcv = document.getElementById('pcanvas');
+const pg = pcv.getContext('2d');
+const Z_MIN = 100, Z_MAX = 540;
+function drawPrinciple(p){
+  const w = pcv.width, h = pcv.height;
+  const L = 56, Rr = w-16, T = 14, B = h-42;
+  const xFor = f => L + (Rr-L) * (Math.log10(f) - Math.log10(F_LO)) /
+                              (Math.log10(F_HI) - Math.log10(F_LO));
+  const yFor = z => B - (B-T) * (z - Z_MIN) / (Z_MAX - Z_MIN);
+  pg.clearRect(0,0,w,h);
+  pg.strokeStyle = 'rgba(168,200,218,0.1)'; pg.lineWidth = 1.5;
+  [1e3,1e4,1e5].forEach(f=>{ pg.beginPath(); pg.moveTo(xFor(f),T); pg.lineTo(xFor(f),B); pg.stroke(); });
+  pg.strokeStyle = 'rgba(168,200,218,0.22)'; pg.lineWidth = 2;
+  pg.beginPath(); pg.moveTo(L,T); pg.lineTo(L,B); pg.lineTo(Rr,B); pg.stroke();
+  pg.fillStyle = 'rgba(143,160,171,0.9)';
+  pg.font = '500 17px ui-monospace, Menlo, Consolas, monospace';
+  pg.textAlign = 'center';
+  pg.fillText('1k', xFor(1e3), h-14);
+  pg.fillText('10k', xFor(1e4), h-14);
+  pg.fillText('100k', xFor(1e5), h-14);
+  pg.save(); pg.translate(16,(T+B)/2); pg.rotate(-Math.PI/2);
+  pg.fillText('|Z|  \u03A9', 0, 0); pg.restore();
+  pg.textAlign = 'left';
+  pg.save(); pg.setLineDash([6,6]);
+  pg.strokeStyle = 'rgba(143,160,171,0.8)'; pg.lineWidth = 2.5;
+  pg.beginPath();
+  for(let i=0;i<=60;i++){
+    const f = F_LO * Math.pow(F_HI/F_LO, i/60);
+    i ? pg.lineTo(xFor(f), yFor(zAt(f,0))) : pg.moveTo(xFor(f), yFor(zAt(f,0)));
+  }
+  pg.stroke(); pg.restore();
+  const sweeps = [0.25,0.5,0.75,1.0];
+  sweeps.forEach((k,n)=>{
+    if(p > 0 && p < k*0.95) return;
+    const s = sstep(CLOT_ONSET, 0.95, k);
+    pg.beginPath();
+    pg.strokeStyle = 'rgba(125,233,166,' + (0.3 + 0.7*(n+1)/sweeps.length).toFixed(2) + ')';
+    pg.lineWidth = n === sweeps.length-1 ? 3.5 : 2.5;
+    for(let i=0;i<=60;i++){
+      const f = F_LO * Math.pow(F_HI/F_LO, i/60);
+      i ? pg.lineTo(xFor(f), yFor(zAt(f,s))) : pg.moveTo(xFor(f), yFor(zAt(f,s)));
+    }
+    pg.stroke();
+  });
+  pg.fillStyle = 'rgba(125,233,166,0.07)';
+  pg.fillRect(xFor(3e3), T, xFor(2e4)-xFor(3e3), B-T);
+  pg.fillStyle = 'rgba(143,160,171,0.9)';
+  pg.font = '500 16px "Helvetica Neue", Arial, sans-serif';
+  pg.fillText('liquid', xFor(1.3e3), yFor(zAt(1.3e3,0)) + 22);
+  pg.fillStyle = 'rgba(125,233,166,0.95)';
+  pg.fillText('clotting', xFor(1.3e3), yFor(zAt(1.3e3,1)) - 10);
+}
+drawPrinciple(1);
+
+// ══════════════════════════════════════════ controls
+const slider = document.getElementById('ex');
+const readout = document.getElementById('exVal');
+const stepsBar = document.getElementById('steps');
+const keyPanel = document.getElementById('key');
+const stepEls = Array.prototype.slice.call(stepsBar.querySelectorAll('.st'));
+let target = slider.value/100, current = target;
+let mode = 'exploded';
+
+slider.addEventListener('input', ()=>{
+  setAutoPlay(false);
+  target = slider.value/100;
+  readout.textContent = slider.value + '%';
+});
+document.getElementById('btnFit').addEventListener('click', ()=>{
+  setAutoPlay(false);
+  slider.value = 0; target = 0; readout.textContent = '0%';
+});
+let spin = true;
+const btnSpin = document.getElementById('btnSpin');
+function setSpin(on){
+  spin = on;
+  btnSpin.setAttribute('aria-pressed', String(on));
+  btnSpin.textContent = on ? 'Stop spin' : 'Start spin';
+}
+btnSpin.addEventListener('click', ()=>{ setAutoPlay(false); setSpin(!spin); });
+
+const btnEx = document.getElementById('btnEx'), btnDemo = document.getElementById('btnDemo');
+function setMode(m){
+  mode = m;
+  clearFocus();
+  btnEx.setAttribute('aria-pressed', String(m === 'exploded'));
+  btnDemo.setAttribute('aria-pressed', String(m === 'demo'));
+  slider.disabled = m === 'demo';
+  stepsBar.style.opacity = m === 'demo' ? 1 : 0;
+  keyPanel.style.opacity = m === 'demo' ? 0 : 1;
+  keyPanel.style.pointerEvents = m === 'demo' ? 'none' : 'auto';
+  document.getElementById('principle').style.opacity = m === 'demo' ? 1 : 0;
+  if(m === 'demo'){
+    target = 0; slider.value = 0; readout.textContent = '0%';
+    camGoal.dist = 6.4; camGoal.pitch = 0.2; camGoal.target.set(0,0.35,0);
+    demoClock = 0;
+  } else {
+    target = 0.7; slider.value = 70; readout.textContent = '70%';
+    camGoal.dist = 9.6; camGoal.pitch = 0.24; camGoal.target.set(0,0.35,0);
+    resetDemoVisuals(); drawOLED(1);
+  }
+}
+btnEx.addEventListener('click', ()=>{ setAutoPlay(false); setMode('exploded'); });
+btnDemo.addEventListener('click', ()=>{ setAutoPlay(false); setMode('demo'); });
+
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ══════════════════════════════════════════ workflow demo
+const STEP_DUR = [3.0, 2.4, 6.0];
+const TOTAL = STEP_DUR.reduce((a,b)=>a+b,0);
+let demoClock = 0;
+function runDemo(dt){
+  demoClock = (demoClock + dt) % TOTAL;
+  let t = demoClock, step = 0;
+  while(t > STEP_DUR[step]){ t -= STEP_DUR[step]; step++; }
+  const u = t / STEP_DUR[step];
+  let lift = 0, fill = 0, assay = 0;
+  if(step === 0){ lift = 1.45; fill = sstep(0.15,0.85,u); }
+  if(step === 1){ lift = 1.45 * (1 - sstep(0,1,u)); fill = 1; }
+  if(step === 2){ lift = 0; fill = 1; assay = sstep(0,1,u); }
+  cuvette.userData.extraY = lift;
+  bloodFilm.scale.y = Math.max(fill, 0.001);
+  bloodFilm.position.y = -0.21 + 0.035*(1-fill);
+  bloodDrop.visible = fill > 0.25;
+  // liquid blood is bright and wet; a set clot goes dark and matte
+  const set = sstep(CLOT_ONSET, 0.95, assay);
+  [bloodFilm.material, bloodDrop.material].forEach(m=>{
+    m.color.setRGB(0.42 - 0.17*set, 0.059 - 0.02*set, 0.075 - 0.026*set);
+    m.roughness = 0.16 + 0.52*set;
+    m.clearcoat = 1 - 0.75*set;
+    m.transmission = 0.24 * (1 - set);
+  });
+  drawOLED(assay);
+  drawPrinciple(step === 2 ? assay : 0);
+  const done = step === 2 && assay > 0.9;
+  statusLed.material.color.setHex(done ? 0x9CF7B4 : (step === 2 ? 0xF7D89C : 0x6C7A82));
+  lightPipe.material.emissiveIntensity =
+    step === 2 ? (done ? 0.95 : 0.45 + 0.35*Math.sin(demoClock*7)) : 0.12;
+  stepEls.forEach((el,i)=>{
+    el.classList.toggle('on', i === step);
+    el.querySelector('u').style.width = (i < step ? 100 : i === step ? u*100 : 0) + '%';
+  });
+}
+function resetDemoVisuals(){
+  cuvette.userData.extraY = 0;
+  bloodFilm.scale.y = 1; bloodFilm.position.y = -0.21;
+  bloodDrop.visible = true;
+  [bloodFilm.material, bloodDrop.material].forEach(m=>{
+    m.color.setRGB(0.42, 0.059, 0.075);
+    m.roughness = 0.16; m.clearcoat = 1; m.transmission = 0.24;
+  });
+  statusLed.material.color.setHex(0x9CF7B4);
+  lightPipe.material.emissiveIntensity = 0.6;
+}
+
+// ══════════════════════════════════════════ autoplay director
+// Runs the whole 45s pitch demo hands-free: assemble → tour every labelled
+// component → run the live clotting-assay walkthrough → loop. Any manual
+// interaction (drag, click, slider, buttons) calls setAutoPlay(false) above.
+const PART_ORDER = ['upper','display','cuvette','heater','pogo','pcb','mcu','battery','lower'];
+const FOCUS_START = 4.5, FOCUS_DUR = 2.55;
+const DEMO_START  = FOCUS_START + PART_ORDER.length * FOCUS_DUR;   // ≈27.4s
+const AUTO_TOTAL  = 45;
+let autoPlay = true, autoClock = 0, autoPrevClock = 0, autoState = {};
+const btnAuto = document.getElementById('btnAuto');
+function setAutoPlay(on){
+  autoPlay = on;
+  btnAuto.setAttribute('aria-pressed', String(on));
+  btnAuto.textContent = on ? 'Auto-demo: On' : 'Auto-demo: Off';
+  if(on){ autoState = {}; autoClock = 0; autoPrevClock = 0; }
+}
+btnAuto.addEventListener('click', ()=> setAutoPlay(!autoPlay));
+
+function runAuto(dt){
+  autoClock += dt;
+  if(autoClock >= AUTO_TOTAL) autoClock -= AUTO_TOTAL;
+  if(autoClock < autoPrevClock) autoState = {};   // wrapped — start a fresh lap
+  autoPrevClock = autoClock;
+  const t = autoClock;
+
+  if(!autoState.started){
+    setMode('exploded');
+    clearFocus();
+    slider.value = 0; target = 0; readout.textContent = '0%';
+    camGoal.yaw = 0.55;
+    setSpin(true);
+    autoState.started = true;
+    autoState.opened = false;
+    autoState.focusIdx = -1;
+    autoState.demoStarted = false;
+  }
+  if(!autoState.opened && t > 1.1){                 // assemble the exploded stack
+    target = 0.72; slider.value = 72; readout.textContent = '72%';
+    autoState.opened = true;
+  }
+  if(t >= FOCUS_START && t < DEMO_START){            // tour every component, in order
+    const idx = Math.min(PART_ORDER.length - 1, Math.floor((t - FOCUS_START) / FOCUS_DUR));
+    if(idx !== autoState.focusIdx){
+      autoState.focusIdx = idx;
+      const p = byId[PART_ORDER[idx]];
+      if(p) focusPart(p);
+    }
+  }
+  if(t >= DEMO_START && !autoState.demoStarted){     // run the live assay walkthrough
+    autoState.demoStarted = true;
+    clearFocus();
+    setMode('demo');
+  }
+}
+
+// ══════════════════════════════════════════ loop
+let last = performance.now();
+const worldPos = new THREE.Vector3();
+function frame(now){
+  requestAnimationFrame(frame);
+  const dt = Math.min((now-last)/1000, 0.05); last = now;
+
+  if(autoPlay) runAuto(dt);
+  if(mode === 'demo') runDemo(dt);
+  if(spin && !dragging && !focused) camGoal.yaw += 0.002;
+
+  current += (target - current) * 0.1;
+
+  // keep the focus target locked on the component as it settles
+  if(focused){
+    focused.getWorldPosition(worldPos);
+    camGoal.target.lerp(worldPos, 0.25);
+  }
+  camNow.yaw   += (camGoal.yaw   - camNow.yaw)   * 0.1;
+  camNow.pitch += (camGoal.pitch - camNow.pitch) * 0.08;
+  camNow.dist  += (camGoal.dist  - camNow.dist)  * 0.075;
+  camNow.target.lerp(camGoal.target, 0.09);
+
+  parts.forEach(p=>{
+    const d = p.userData;
+    const want = d.home.y + d.rise * current + d.extraY;
+    p.position.y += (want - p.position.y) * 0.18;
+    d.dim += (d.dimGoal - d.dim) * 0.12;
+    // dim everything except the inspected component
+    if(d.dim > 0.002 || d.dimApplied){
+      const k = 1 - 0.86*d.dim;
+      p.traverse(o=>{
+        if(!o.isMesh) return;
+        o.material.transparent = o.userData.baseTransparent || d.dim > 0.01;
+        o.material.opacity = (o.userData.baseOpacity === undefined ? 1 : o.userData.baseOpacity) * k;
+        if(o.userData.baseEmissive !== undefined && o.material.emissiveIntensity !== undefined)
+          o.material.emissiveIntensity = o.userData.baseEmissive * k;
+      });
+      d.dimApplied = d.dim > 0.002;
+    }
+    // contact shadow tracks the part and softens with height
+    const s = d.contact;
+    if(s){
+      s.position.x = p.position.x; s.position.z = p.position.z;
+      const height = p.position.y - floor.position.y;
+      const spread = 1 + Math.max(0, height) * 0.16;
+      s.scale.set(spread, spread, 1);
+      s.material.opacity = 0.5 / (1 + Math.max(0, height)*0.55) * (1 - 0.8*d.dim);
+    }
+  });
+
+  // heater halo breathes
+  const pulse = 0.85 + 0.15*Math.sin(now*0.0016);
+  coilGlow.forEach((h,i)=>{ h.material.opacity = (0.2 - i*0.1) * pulse; });
+
+  const vis = mode === 'demo' ? 0 : sstep(0.06, 0.22, current);
+  placeCamera();
+  placeTags(vis);
+  renderer.render(scene, camera);
+}
+resetDemoVisuals();
+placeCamera();
+requestAnimationFrame(frame);
+}
+</script>
+</body>
+</html>     the one i showed pratik

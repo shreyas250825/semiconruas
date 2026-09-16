@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RUAS Smart Campus Explorer (3D Interactive)</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; background: #030a14; color: #e0f4ff; }
+
+        /* Floating HUD Header */
+        .ar-hud {
+            position: absolute; top: 15px; left: 15px; right: 15px;
+            display: flex; justify-content: space-between; align-items: center;
+            z-index: 10; pointer-events: none;
+        }
+        .hud-card {
+            background: rgba(4, 14, 28, 0.85); border: 1px solid #00f0ff88;
+            padding: 10px 18px; border-radius: 8px; backdrop-filter: blur(8px);
+            pointer-events: auto;
+        }
+        .hud-title { font-size: 15px; font-weight: bold; color: #00f0ff; letter-spacing: 1px; }
+        .hud-sub { font-size: 11px; color: #88aacc; }
+
+        /* Category Filter Controls */
+        #controls-panel {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 8px; background: rgba(4, 14, 28, 0.9);
+            border: 1px solid #00f0ff55; padding: 10px 14px; border-radius: 30px;
+            z-index: 10; backdrop-filter: blur(8px); flex-wrap: wrap; justify-content: center;
+        }
+        .filter-btn {
+            background: rgba(0, 240, 255, 0.1); border: 1px solid #00f0ff66;
+            color: #00f0ff; padding: 6px 14px; border-radius: 20px;
+            font-size: 11px; font-weight: bold; cursor: pointer; transition: all 0.2s ease;
+        }
+        .filter-btn:hover, .filter-btn.active {
+            background: #00f0ff; color: #030a14; box-shadow: 0 0 10px #00f0ffaa;
+        }
+
+        /* Detail Inspector Panel */
+        #inspector-panel {
+            position: absolute; top: 80px; right: 15px; width: 280px;
+            background: rgba(4, 14, 28, 0.92); border: 1px solid #00ffaa66;
+            padding: 16px; border-radius: 10px; z-index: 10;
+            box-shadow: 0 0 15px rgba(0, 255, 170, 0.15); backdrop-filter: blur(8px);
+        }
+        .inspector-title { font-size: 14px; font-weight: bold; color: #00ffaa; margin-bottom: 4px; }
+        .inspector-tag { font-size: 10px; color: #00f0ff; text-transform: uppercase; font-weight: bold; margin-bottom: 8px; }
+        .inspector-stat { font-size: 11px; color: #c0e0f0; margin-top: 5px; line-height: 1.4; }
+        .stat-label { color: #88aacc; }
+    </style>
+
+    <!-- Three.js, OrbitControls, & GSAP -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+</head>
+<body>
+
+    <div class="ar-hud">
+        <div class="hud-card">
+            <div class="hud-title">RUAS SMART CAMPUS EXPLORER</div>
+            <div class="hud-sub">Powered by Indigenous RUAS Chips</div>
+        </div>
+        <div class="hud-card" style="text-align: right;">
+            <div style="font-size: 18px; color: #00ffaa; font-weight: bold;">31.8 MHz</div>
+            <div style="font-size: 10px; color: #c0e0f0;">Core Clock</div>
+        </div>
+    </div>
+
+    <!-- Filter Buttons -->
+    <div id="controls-panel">
+        <button class="filter-btn active" onclick="filterView('ALL')">All IoT</button>
+        <button class="filter-btn" onclick="filterView('CAMERA')">AI Cameras</button>
+        <button class="filter-btn" onclick="filterView('ENERGY')">Smart Grids</button>
+        <button class="filter-btn" onclick="filterView('SENSOR')">IoT Sensors</button>
+        <button class="filter-btn" onclick="filterView('DRONE')">Drone Missions</button>
+    </div>
+
+    <!-- Inspector Telemetry Popup -->
+    <div id="inspector-panel">
+        <div class="inspector-title" id="node-title">Select an IoT Node</div>
+        <div class="inspector-tag" id="node-type">Interactive Campus Mode</div>
+        <div class="inspector-stat" id="node-desc">Click on any glowing marker to inspect student-designed chip telemetry, gate counts, and real-time smart campus systems.</div>
+        <div id="node-details" style="margin-top: 10px;"></div>
+    </div>
+
+    <script>
+        let scene, camera, renderer, controls, raycaster, mouse;
+        let nodeMarkers = [];
+        let droneMesh, droneCurve, droneProgress = 0;
+
+        // Campus Dataset
+        const campusDataset = [
+            { id: 1, type: "CAMERA", pos: [-6, 0.5, -6], color: 0xff0055, name: "AI Security Camera - Main Gate", chip: "RUAS-N100-AI", desc: "Real-time license plate detection & edge facial recognition.", gates: "18.4k Gates", power: "3.2 mW @ 1.2V" },
+            { id: 2, type: "CAMERA", pos: [6, 0.5, 6], color: 0xff0055, name: "AI Surveillance - Academic Block B", chip: "RUAS-N100-AI", desc: "Crowd density monitoring and automated occupancy sensing.", gates: "18.4k Gates", power: "3.2 mW @ 1.2V" },
+            { id: 3, type: "ENERGY", pos: [3, 0.5, -5], color: 0xffa000, name: "Smart Energy Grid Hub", chip: "RUAS-G150-PMS", desc: "Solar panel optimization and dynamic load balancing across campus.", gates: "12.1k Gates", power: "1.8 mW @ 1.0V" },
+            { id: 4, type: "ENERGY", pos: [-4, 0.5, 2], color: 0xffa000, name: "Hostel Energy Monitor", chip: "RUAS-G150-PMS", desc: "Sub-metering unit measuring power usage in student housing.", gates: "12.1k Gates", power: "1.8 mW @ 1.0V" },
+            { id: 5, type: "SENSOR", pos: [7, 0.5, -2], color: 0x00ffaa, name: "Air Quality & Environmental Sensor", chip: "RUAS-S10-IoT", desc: "Monitors AQI, humidity, temperature, and atmospheric pressure.", gates: "8.5k Gates", power: "0.9 mW @ 0.9V" },
+            { id: 6, type: "SENSOR", pos: [-7, 0.5, 3], color: 0x00ffaa, name: "Weather Station - Block C", chip: "RUAS-S10-IoT", desc: "Solar-powered environmental node providing campus microclimate data.", gates: "8.5k Gates", power: "0.9 mW @ 0.9V" },
+            { id: 7, type: "DRONE", pos: [0, 2.5, 0], color: 0x00f0ff, name: "Autonomous Drone Controller", chip: "RUAS-D500-Aero", desc: "Flight path stabilization and perimeter surveillance payload driver.", gates: "24.6k Gates", power: "5.1 mW @ 1.2V" }
+        ];
+
+        init();
+
+        function init() {
+            // Scene Setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x030a14);
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 18, 22);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.body.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.maxPolarAngle = Math.PI / 2.1;
+
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            // Lighting Setup
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0x00f0ff, 1.2);
+            dirLight.position.set(5, 20, 10);
+            scene.add(dirLight);
+
+            // Build Campus Model
+            createCampusLayout();
+            createIoTNodes();
+            createDroneFlightPath();
+
+            // Event Listeners
+            window.addEventListener('resize', onWindowResize);
+            renderer.domElement.addEventListener('pointerup', onPointerDown);
+
+            renderer.setAnimationLoop(animate);
+        }
+
+        // 3D Campus Layout
+        function createCampusLayout() {
+            const grid = new THREE.GridHelper(30, 30, 0x00f0ff, 0x003355);
+            grid.position.y = -0.05;
+            scene.add(grid);
+
+            // Stylized Campus Buildings
+            const buildingMat = new THREE.MeshStandardMaterial({ color: 0x0a1d36, metalness: 0.8, roughness: 0.2 });
+            const wireframeMat = new THREE.LineBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.3 });
+
+            const structures = [
+                { pos: [-6, 1, -6], dim: [5, 2, 5] }, // Gate 1 / Block A
+                { pos: [6, 1, 6], dim: [5, 2, 5] },   // Academic Block B
+                { pos: [7, 1, -2], dim: [3, 2, 4] },  // Block C
+                { pos: [-7, 1, 3], dim: [3, 2, 3] },  // Block D
+                { pos: [0, 1.2, 0], dim: [4, 2.4, 4] } // Central Tech Hub
+            ];
+
+            structures.forEach(s => {
+                const geo = new THREE.BoxGeometry(...s.dim);
+                const mesh = new THREE.Mesh(geo, buildingMat);
+                mesh.position.set(...s.pos);
+                scene.add(mesh);
+
+                const wireframe = new THREE.LineSegments(new THREE.WireframeGeometry(geo), wireframeMat);
+                wireframe.position.set(...s.pos);
+                scene.add(wireframe);
+            });
+        }
+
+        // Create Glowing Interactive Pins
+        function createIoTNodes() {
+            campusDataset.forEach(data => {
+                const pinGroup = new THREE.Group();
+                pinGroup.position.set(...data.pos);
+
+                // Core Sphere
+                const sphereGeo = new THREE.SphereGeometry(0.3, 16, 16);
+                const sphereMat = new THREE.MeshBasicMaterial({ color: data.color });
+                const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+                pinGroup.add(sphere);
+
+                // Outer Glowing Ring
+                const ringGeo = new THREE.RingGeometry(0.4, 0.6, 32);
+                ringGeo.rotateX(-Math.PI / 2);
+                const ringMat = new THREE.MeshBasicMaterial({ color: data.color, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
+                const ring = new THREE.Mesh(ringGeo, ringMat);
+                pinGroup.add(ring);
+
+                // Beacon Shaft
+                const lineGeo = new THREE.CylinderGeometry(0.03, 0.03, 1.8, 8);
+                lineGeo.translate(0, 0.9, 0);
+                const lineMat = new THREE.MeshBasicMaterial({ color: data.color, transparent: true, opacity: 0.6 });
+                const beacon = new THREE.Mesh(lineGeo, lineMat);
+                pinGroup.add(beacon);
+
+                pinGroup.userData = data;
+                scene.add(pinGroup);
+                nodeMarkers.push(pinGroup);
+            });
+        }
+
+        // Dynamic Drone Path
+        function createDroneFlightPath() {
+            droneCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(-6, 3, -6),
+                new THREE.Vector3(0, 4, -5),
+                new THREE.Vector3(6, 3, -2),
+                new THREE.Vector3(6, 3, 6),
+                new THREE.Vector3(-4, 4, 2),
+                new THREE.Vector3(-6, 3, -6)
+            ]);
+
+            const points = droneCurve.getPoints(100);
+            const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+            const lineMat = new THREE.LineBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.4 });
+            const pathLine = new THREE.Line(lineGeo, lineMat);
+            scene.add(pathLine);
+
+            // Drone Indicator Object
+            const droneGeo = new THREE.OctahedronGeometry(0.35);
+            const droneMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff, wireframe: true });
+            droneMesh = new THREE.Mesh(droneGeo, droneMat);
+            scene.add(droneMesh);
+        }
+
+        // Raycasting Logic
+        function onPointerDown(event) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(nodeMarkers, true);
+
+            if (intersects.length > 0) {
+                let clickedGroup = intersects[0].object;
+                while (clickedGroup.parent && clickedGroup.parent !== scene) {
+                    if (clickedGroup.userData && clickedGroup.userData.name) {
+                        break;
+                    }
+                    clickedGroup = clickedGroup.parent;
+                }
+
+                if (clickedGroup.userData && clickedGroup.userData.name) {
+                    displayNodeDetails(clickedGroup.userData);
+                    animateCameraToNode(clickedGroup.position);
+                }
+            }
+        }
+
+        function displayNodeDetails(data) {
+            document.getElementById('node-title').innerText = data.name;
+            document.getElementById('node-type').innerText = `CHIP CORE: ${data.chip}`;
+            document.getElementById('node-desc').innerText = data.desc;
+
+            let detailsHTML = `
+                <div class="inspector-stat"><span class="stat-label">Logic Gate Count:</span> <b>${data.gates}</b></div>
+                <div class="inspector-stat"><span class="stat-label">Power Consumption:</span> <b>${data.power}</b></div>
+                <div class="inspector-stat"><span class="stat-label">Design Origin:</span> <b>RUAS Student IP Core</b></div>
+            `;
+            document.getElementById('node-details').innerHTML = detailsHTML;
+        }
+
+        function animateCameraToNode(targetPos) {
+            gsap.to(controls.target, {
+                x: targetPos.x,
+                y: targetPos.y,
+                z: targetPos.z,
+                duration: 1.2,
+                ease: 'power2.out'
+            });
+        }
+
+        // Filtering
+        function filterView(type) {
+            if (event) {
+                document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+                event.target.classList.add('active');
+            }
+
+            nodeMarkers.forEach(pin => {
+                if (type === 'ALL' || pin.userData.type === type) {
+                    pin.visible = true;
+                } else {
+                    pin.visible = false;
+                }
+            });
+        }
+
+        function animate() {
+            // Pulse & rotate markers
+            nodeMarkers.forEach(pin => {
+                if (pin.visible) {
+                    pin.rotation.y += 0.02;
+                }
+            });
+
+            // Animate Drone Position along path
+            droneProgress += 0.0015;
+            if (droneProgress > 1) droneProgress = 0;
+            const dronePos = droneCurve.getPoint(droneProgress);
+            if (droneMesh) {
+                droneMesh.position.copy(dronePos);
+                droneMesh.rotation.y += 0.03;
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+</html>

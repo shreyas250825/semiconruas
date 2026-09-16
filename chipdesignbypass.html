@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Chip Design Explorer - 3D Interactive View</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; background: #040c18; color: #e0f4ff; }
+
+        /* Floating HUD Header */
+        .ar-hud {
+            position: absolute; top: 15px; left: 15px; right: 15px;
+            display: flex; justify-content: space-between; align-items: center;
+            z-index: 10; pointer-events: none;
+        }
+        .hud-card {
+            background: rgba(4, 12, 24, 0.85); border: 1px solid #00f0ff88;
+            padding: 10px 16px; border-radius: 8px; backdrop-filter: blur(6px);
+            pointer-events: auto;
+        }
+        .hud-title { font-size: 14px; font-weight: bold; color: #00f0ff; letter-spacing: 1px; }
+        .hud-sub { font-size: 10px; color: #88aacc; }
+
+        /* Layer Explosion Controller */
+        #controls-panel {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            width: 90%; max-width: 400px; background: rgba(4, 12, 24, 0.9);
+            border: 1px solid #00f0ff55; padding: 12px 18px; border-radius: 12px;
+            z-index: 10; backdrop-filter: blur(8px);
+        }
+        .slider-label { display: flex; justify-content: space-between; font-size: 11px; font-weight: bold; color: #00f0ff; margin-bottom: 6px; }
+        input[type=range] { width: 100%; accent-color: #00f0ff; cursor: pointer; }
+
+        /* Inspector Panel */
+        #inspector-panel {
+            position: absolute; top: 75px; right: 15px; width: 220px;
+            background: rgba(4, 12, 24, 0.9); border: 1px solid #00ffaa66;
+            padding: 12px; border-radius: 8px; z-index: 10;
+        }
+        .inspector-title { font-size: 12px; font-weight: bold; color: #00ffaa; margin-bottom: 4px; }
+        .inspector-stat { font-size: 10px; color: #c0e0f0; margin-top: 3px; }
+    </style>
+
+    <!-- Three.js, OrbitControls, & GSAP Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+</head>
+<body>
+
+    <div class="ar-hud">
+        <div class="hud-card">
+            <div class="hud-title">AR CHIP DESIGN EXPLORER</div>
+            <div class="hud-sub">3D Interactive Model Inspection Mode</div>
+        </div>
+    </div>
+
+    <!-- Interactive Layer Controls -->
+    <div id="controls-panel">
+        <div class="slider-label">
+            <span>3D Layer Explosion</span>
+            <span id="explode-val">100%</span>
+        </div>
+        <input type="range" id="explode-slider" min="0" max="1" step="0.01" value="1">
+    </div>
+
+    <!-- Inspector Telemetry Popup -->
+    <div id="inspector-panel">
+        <div class="inspector-title" id="block-name">3D Chip Architecture</div>
+        <div class="inspector-stat" id="block-desc">Multi-layer Integrated Circuit System</div>
+        <div class="inspector-stat">Power Density: <b>42.5 W/cm²</b></div>
+        <div class="inspector-stat">Signal Throughput: <b>12.8 Gbps</b></div>
+        <div class="inspector-stat" style="margin-top: 8px; color: #88aacc;">* Click & drag to rotate view</div>
+    </div>
+
+    <script>
+        let scene, camera, renderer, controls;
+        let explodeFactor = 1;
+        let signalParticles = [];
+
+        // Layers Group References
+        let chipGroup, layerSubstrate, layerFinFETs, layerRouting, layerLogicBlocks, layerCasing;
+
+        init();
+
+        function init() {
+            const container = document.body;
+
+            // Scene & Camera Setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x040c18);
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 3, 5);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+
+            // Orbit Controls (Mouse/Touch Rotation & Zoom)
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            // Lighting Setup
+            const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0x00f0ff, 1.5);
+            dirLight.position.set(2, 5, 3);
+            scene.add(dirLight);
+
+            chipGroup = new THREE.Group();
+            scene.add(chipGroup);
+
+            // Build 3D Chip Architecture
+            build3DChipLayers();
+
+            // Event Listeners
+            window.addEventListener('resize', onWindowResize);
+            document.getElementById('explode-slider').addEventListener('input', (e) => {
+                explodeFactor = parseFloat(e.target.value);
+                document.getElementById('explode-val').innerText = `${Math.round(explodeFactor * 100)}%`;
+                updateLayerExplosion();
+            });
+
+            renderer.setAnimationLoop(animate);
+        }
+
+        function build3DChipLayers() {
+            // 1. Silicon Substrate Layer
+            layerSubstrate = new THREE.Mesh(
+                new THREE.BoxGeometry(2, 0.08, 2),
+                new THREE.MeshStandardMaterial({ color: 0x112233, metalness: 0.8 })
+            );
+            chipGroup.add(layerSubstrate);
+
+            // 2. Transistor FinFET Structures Layer
+            layerFinFETs = new THREE.Group();
+            const finMat = new THREE.MeshStandardMaterial({ color: 0x00ffaa, metalness: 0.6 });
+            for (let x = -0.7; x <= 0.7; x += 0.35) {
+                for (let z = -0.7; z <= 0.7; z += 0.35) {
+                    let fin = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 0.12), finMat);
+                    fin.position.set(x, 0.05, z);
+                    layerFinFETs.add(fin);
+                }
+            }
+            chipGroup.add(layerFinFETs);
+
+            // 3. Interconnect Routing Metal Layers
+            layerRouting = new THREE.Group();
+            const wireMat = new THREE.MeshStandardMaterial({ color: 0x00f0ff, wireframe: true });
+            let gridRouting = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.02, 1.8, 12, 1, 12), wireMat);
+            layerRouting.add(gridRouting);
+
+            // Signal Flow Particles
+            for(let i = 0; i < 20; i++) {
+                let p = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.02, 8, 8),
+                    new THREE.MeshBasicMaterial({ color: 0xffaa00 })
+                );
+                p.position.set((Math.random() - 0.5) * 1.5, 0.02, (Math.random() - 0.5) * 1.5);
+                layerRouting.add(p);
+                signalParticles.push(p);
+            }
+            chipGroup.add(layerRouting);
+
+            // 4. Higher-Level Logic Blocks
+            layerLogicBlocks = new THREE.Group();
+            const blockMat = new THREE.MeshStandardMaterial({ color: 0x2266aa, metalness: 0.7 });
+            const cores = [
+                { name: "CPU Control Unit", pos: [-0.45, 0.1, -0.45] },
+                { name: "AI Tensor Engine", pos: [0.45, 0.1, -0.45] },
+                { name: "SRAM Cache Bank", pos: [-0.45, 0.1, 0.45] },
+                { name: "I/O Interface Block", pos: [0.45, 0.1, 0.45] }
+            ];
+            cores.forEach(c => {
+                let block = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.15, 0.7), blockMat);
+                block.position.set(...c.pos);
+                layerLogicBlocks.add(block);
+            });
+            chipGroup.add(layerLogicBlocks);
+
+            // 5. Encapsulation Casing
+            layerCasing = new THREE.Mesh(
+                new THREE.BoxGeometry(2.1, 0.15, 2.1),
+                new THREE.MeshStandardMaterial({ color: 0x081424, transparent: true, opacity: 0.4 })
+            );
+            chipGroup.add(layerCasing);
+
+            updateLayerExplosion();
+        }
+
+        function updateLayerExplosion() {
+            // Animate layer Y-positions based on explosion slider percentage
+            gsap.to(layerSubstrate.position, { y: 0, duration: 0.3 });
+            gsap.to(layerFinFETs.position, { y: 0.2 + (explodeFactor * 0.4), duration: 0.3 });
+            gsap.to(layerRouting.position, { y: 0.4 + (explodeFactor * 0.8), duration: 0.3 });
+            gsap.to(layerLogicBlocks.position, { y: 0.6 + (explodeFactor * 1.2), duration: 0.3 });
+            gsap.to(layerCasing.position, { y: 0.8 + (explodeFactor * 1.6), duration: 0.3 });
+        }
+
+        function animate() {
+            // Idle rotation for the chip structure
+            chipGroup.rotation.y += 0.003;
+
+            // Animate Signal Flow Particles
+            signalParticles.forEach(p => {
+                p.position.x += 0.01;
+                if (p.position.x > 0.9) p.position.x = -0.9;
+            });
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+</html>

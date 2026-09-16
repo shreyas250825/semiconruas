@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chip2Startup AR Learning Platform</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; background: #030a14; color: #e0f4ff; }
+
+        /* Floating HUD Header */
+        .hud-header {
+            position: absolute; top: 15px; left: 15px; right: 15px;
+            display: flex; justify-content: space-between; align-items: center;
+            z-index: 10; pointer-events: none;
+        }
+        .hud-card {
+            background: rgba(4, 14, 28, 0.85); border: 1px solid #00f0ff88;
+            padding: 10px 18px; border-radius: 8px; backdrop-filter: blur(8px);
+            pointer-events: auto;
+        }
+        .hud-title { font-size: 15px; font-weight: bold; color: #00f0ff; letter-spacing: 1px; }
+        .hud-sub { font-size: 11px; color: #88aacc; }
+
+        /* Target Selection Bottom Panel */
+        #target-panel {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 8px; background: rgba(4, 14, 28, 0.9);
+            border: 1px solid #00f0ff55; padding: 10px 14px; border-radius: 30px;
+            z-index: 10; backdrop-filter: blur(8px); flex-wrap: wrap; justify-content: center;
+        }
+        .target-btn {
+            background: rgba(0, 240, 255, 0.1); border: 1px solid #00f0ff66;
+            color: #00f0ff; padding: 6px 14px; border-radius: 20px;
+            font-size: 11px; font-weight: bold; cursor: pointer; transition: all 0.2s ease;
+        }
+        .target-btn:hover, .target-btn.active {
+            background: #00f0ff; color: #030a14; box-shadow: 0 0 10px #00f0ffaa;
+        }
+
+        /* Learning & Telemetry Inspector Panel */
+        #learning-panel {
+            position: absolute; top: 75px; right: 15px; width: 320px;
+            background: rgba(4, 14, 28, 0.92); border: 1px solid #00ffaa66;
+            padding: 16px; border-radius: 10px; z-index: 10;
+            box-shadow: 0 0 15px rgba(0, 255, 170, 0.15); backdrop-filter: blur(8px);
+            max-height: calc(100vh - 120px); overflow-y: auto;
+        }
+        .inspector-title { font-size: 15px; font-weight: bold; color: #00ffaa; margin-bottom: 2px; }
+        .inspector-tag { font-size: 10px; color: #00f0ff; text-transform: uppercase; font-weight: bold; margin-bottom: 10px; }
+        
+        .section-header { font-size: 11px; font-weight: bold; color: #88aacc; text-transform: uppercase; margin-top: 12px; margin-bottom: 4px; border-bottom: 1px solid #00f0ff33; padding-bottom: 2px; }
+        .info-stat { font-size: 11px; color: #c0e0f0; margin-top: 4px; line-height: 1.4; }
+        
+        /* Video Container Simulation */
+        .video-box {
+            width: 100%; height: 120px; background: #000; border: 1px solid #00f0ff66;
+            border-radius: 6px; margin-top: 6px; display: flex; justify-content: center;
+            align-items: center; color: #00f0ff; font-size: 11px; cursor: pointer;
+            background-size: cover; background-position: center; position: relative;
+        }
+        .video-play-btn {
+            width: 32px; height: 32px; background: rgba(0, 240, 255, 0.8);
+            border-radius: 50%; display: flex; justify-content: center; align-items: center;
+            color: #030a14; font-weight: bold; font-size: 14px;
+        }
+
+        .file-link {
+            display: inline-block; background: rgba(0, 255, 170, 0.1); border: 1px solid #00ffaa66;
+            color: #00ffaa; padding: 4px 10px; border-radius: 4px; font-size: 10px;
+            margin-top: 6px; text-decoration: none; cursor: pointer; transition: all 0.2s ease;
+        }
+        .file-link:hover { background: #00ffaa; color: #030a14; }
+    </style>
+
+    <!-- Three.js, OrbitControls, & GSAP -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+</head>
+<body>
+
+    <div class="hud-header">
+        <div class="hud-card">
+            <div class="hud-title">CHIP2STARTUP LEARNING PLATFORM</div>
+            <div class="hud-sub">Interactive AR Component Inspector</div>
+        </div>
+        <div class="hud-card" style="text-align: right;">
+            <div style="font-size: 14px; color: #00ffaa; font-weight: bold;">C2S NODE</div>
+            <div style="font-size: 10px; color: #c0e0f0;">IIT / NIT Network</div>
+        </div>
+    </div>
+
+    <!-- Component Selection Toolbar -->
+    <div id="target-panel">
+        <button class="target-btn active" onclick="selectComponent('IC')">IC Package</button>
+        <button class="target-btn" onclick="selectComponent('WAFER')">Silicon Wafer</button>
+        <button class="target-btn" onclick="selectComponent('SENSOR')">MEMS Sensor</button>
+        <button class="target-btn" onclick="selectComponent('PCB')">System PCB</button>
+    </div>
+
+    <!-- Educational Content & Telemetry Inspector -->
+    <div id="learning-panel">
+        <div class="inspector-title" id="comp-title">RISC-V Microcontroller IC</div>
+        <div class="inspector-tag" id="comp-subtitle">Target: Quad Flat Package (QFP-48)</div>
+        
+        <div class="section-header">Internal Architecture Overlay</div>
+        <div class="info-stat" id="comp-arch">32-Bit RISC-V Core, 64KB SRAM, Dual-Channel SPI, I2C, UART Controller.</div>
+
+        <div class="section-header">Pinout & Interfaces</div>
+        <div class="info-stat" id="comp-pins">Pins 1-12: GPIO | Pin 13: VDD (1.2V) | Pin 14: GND | Pins 15-20: JTAG Debug</div>
+
+        <div class="section-header">Educational Lecture Video</div>
+        <div class="video-box" id="video-preview" onclick="playLecture()">
+            <div class="video-play-btn">▶</div>
+        </div>
+
+        <div class="section-header">Open-Source Design Files</div>
+        <a class="file-link" id="file-verilog" onclick="downloadFile('Verilog RTL')">📄 Download Verilog RTL (.v)</a>
+        <a class="file-link" id="file-gds" onclick="downloadFile('GDSII Layout')">📐 Download GDSII Layout (.gds)</a>
+    </div>
+
+    <script>
+        let scene, camera, renderer, controls, raycaster, mouse;
+        let currentMeshGroup;
+
+        // Interactive Target Database
+        const learningData = {
+            'IC': {
+                title: "DIR-V SHAKTI RISC-V IC",
+                subtitle: "Target: QFP-48 Encapsulated Package",
+                arch: "Indigenous 32-bit RISC-V Class core with integrated 64KB SRAM, AXI4 Bus Matrix, and Hardware Encryption Unit.",
+                pins: "Pins 1-12: GPIO Control | Pin 13: VDD (1.2V Core) | Pin 14: VSS | Pins 15-20: JTAG Debug Interface.",
+                videoBg: "linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url('https://images.unsplash.com/photo-1518770660439-4636190af475?w=400')",
+                verilog: "DIR_V_Core.v",
+                gds: "DIR_V_Chip_Layout.gds"
+            },
+            'WAFER': {
+                title: "200mm Silicon Wafer",
+                subtitle: "Target: 180nm CMOS Semiconductor Wafer",
+                arch: "Monocrystalline silicon substrate featuring 4,200 repeated functional die units fabricated via photolithography.",
+                pins: "Grid Arrays: Die pitch 2.5mm x 2.5mm | Stepper alignment targets located at cardinal margins.",
+                videoBg: "linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url('https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=400')",
+                verilog: "Wafer_Process_Spec.pdf",
+                gds: "Wafer_Mask_Set.gds"
+            },
+            'SENSOR': {
+                title: "MEMS Environmental Sensor",
+                subtitle: "Target: Piezo-Resistive Pressure/Temp Chip",
+                arch: "Micro-machined diaphragm with piezoresistive strain gauges connected in a Wheatstone bridge topology.",
+                pins: "Pin 1: VDD (3.3V) | Pin 2: SDA (I2C Data) | Pin 3: SCL (I2C Clock) | Pin 4: GND.",
+                videoBg: "linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url('https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=400')",
+                verilog: "MEMS_Analog_FrontEnd.v",
+                gds: "MEMS_Structure_Layout.gds"
+            },
+            'PCB': {
+                title: "C2S Edge-AI IoT Motherboard",
+                subtitle: "Target: 4-Layer High-Density PCB",
+                arch: "High-speed board design hosting RISC-V SoC, PMIC, Power Regulation, Flash Memory, and RF Transceiver module.",
+                pins: "Standard 40-pin GPIO Expansion Header | USB-C Power/Data Input | Debug Serial Header.",
+                videoBg: "linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url('https://images.unsplash.com/photo-1517077304055-6e89abbf09b0?w=400')",
+                verilog: "Schematics_KiCad.zip",
+                gds: "Gerber_Manufacturing_Files.zip"
+            }
+        };
+
+        init();
+
+        function init() {
+            // Scene Setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x030a14);
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 5, 8);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.body.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+
+            // Lighting Setup
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0x00f0ff, 1.5);
+            dirLight.position.set(5, 10, 7);
+            scene.add(dirLight);
+
+            // Grid background
+            const grid = new THREE.GridHelper(20, 20, 0x00f0ff, 0x003355);
+            grid.position.y = -1;
+            scene.add(grid);
+
+            // Render Default Component
+            currentMeshGroup = new THREE.Group();
+            scene.add(currentMeshGroup);
+            buildICMesh();
+
+            window.addEventListener('resize', onWindowResize);
+            renderer.setAnimationLoop(animate);
+        }
+
+        // 3D Model Builders
+        function clearCurrentMesh() {
+            while (currentMeshGroup.children.length > 0) {
+                const obj = currentMeshGroup.children[0];
+                currentMeshGroup.remove(obj);
+            }
+        }
+
+        function buildICMesh() {
+            clearCurrentMesh();
+            // Package Body
+            const bodyGeo = new THREE.BoxGeometry(2, 0.3, 2);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.3 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            currentMeshGroup.add(body);
+
+            // Internal Die Hologram (Die Overlay)
+            const dieGeo = new THREE.BoxGeometry(0.8, 0.32, 0.8);
+            const dieMat = new THREE.MeshBasicMaterial({ color: 0x00ffaa, wireframe: true });
+            const die = new THREE.Mesh(dieGeo, dieMat);
+            currentMeshGroup.add(die);
+
+            // Metallic Pins
+            const pinMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.9 });
+            for(let i = -0.8; i <= 0.8; i += 0.4) {
+                // Pins Left/Right
+                const pinL = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.05, 0.1), pinMat);
+                pinL.position.set(-1.1, 0, i);
+                currentMeshGroup.add(pinL);
+
+                const pinR = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.05, 0.1), pinMat);
+                pinR.position.set(1.1, 0, i);
+                currentMeshGroup.add(pinR);
+            }
+        }
+
+        function buildWaferMesh() {
+            clearCurrentMesh();
+            const waferGeo = new THREE.CylinderGeometry(2.5, 2.5, 0.05, 64);
+            const waferMat = new THREE.MeshStandardMaterial({ color: 0x223344, metalness: 0.9, roughness: 0.1 });
+            const wafer = new THREE.Mesh(waferGeo, waferMat);
+            currentMeshGroup.add(wafer);
+
+            // Wafer Die Grid Wireframe
+            const gridGeo = new THREE.GridHelper(3.5, 20, 0x00f0ff, 0x00f0ff);
+            gridGeo.position.y = 0.03;
+            currentMeshGroup.add(gridGeo);
+        }
+
+        function buildSensorMesh() {
+            clearCurrentMesh();
+            // Sensor Substrate
+            const baseMat = new THREE.MeshStandardMaterial({ color: 0x004422 });
+            const base = new THREE.Mesh(new THREE.BoxGeometry(2, 0.15, 2), baseMat);
+            currentMeshGroup.add(base);
+
+            // MEMS Diaphragm Cap
+            const capMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.9 });
+            const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.4, 32), capMat);
+            cap.position.y = 0.2;
+            currentMeshGroup.add(cap);
+        }
+
+        function buildPCBMesh() {
+            clearCurrentMesh();
+            // Board
+            const pcbMat = new THREE.MeshStandardMaterial({ color: 0x003311, roughness: 0.4 });
+            const board = new THREE.Mesh(new THREE.BoxGeometry(4, 0.1, 3), pcbMat);
+            currentMeshGroup.add(board);
+
+            // Main SoC
+            const socMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+            const soc = new THREE.Mesh(new THREE.BoxGeometry(1, 0.2, 1), socMat);
+            soc.position.set(-0.8, 0.1, -0.4);
+            currentMeshGroup.add(soc);
+
+            // Connectors
+            const connMat = new THREE.MeshStandardMaterial({ color: 0xaa8800, metalness: 0.8 });
+            const conn = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, 1.8), connMat);
+            conn.position.set(1.5, 0.15, 0);
+            currentMeshGroup.add(conn);
+        }
+
+        // Select Component Controller
+        function selectComponent(type) {
+            if (event) {
+                document.querySelectorAll('.target-btn').forEach(btn => btn.classList.remove('active'));
+                event.target.classList.add('active');
+            }
+
+            const data = learningData[type];
+            document.getElementById('comp-title').innerText = data.title;
+            document.getElementById('comp-subtitle').innerText = data.subtitle;
+            document.getElementById('comp-arch').innerText = data.arch;
+            document.getElementById('comp-pins').innerText = data.pins;
+            
+            const videoBox = document.getElementById('video-preview');
+            videoBox.style.backgroundImage = data.videoBg;
+
+            document.getElementById('file-verilog').innerText = `📄 Download ${data.verilog}`;
+            document.getElementById('file-gds').innerText = `📐 Download ${data.gds}`;
+
+            // Switch 3D Mesh & Animate Camera
+            if (type === 'IC') buildICMesh();
+            else if (type === 'WAFER') buildWaferMesh();
+            else if (type === 'SENSOR') buildSensorMesh();
+            else if (type === 'PCB') buildPCBMesh();
+
+            gsap.fromTo(currentMeshGroup.rotation, { y: 0 }, { y: Math.PI * 2, duration: 1.2, ease: "power2.out" });
+        }
+
+        function playLecture() {
+            alert("Opening Chip2Startup Educational Video Lecture Stream...");
+        }
+
+        function downloadFile(fileName) {
+            alert(`Initiating download for open-source design file: ${fileName}`);
+        }
+
+        function animate() {
+            if (currentMeshGroup) {
+                currentMeshGroup.rotation.y += 0.005;
+            }
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+</html>
