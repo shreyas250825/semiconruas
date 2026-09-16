@@ -1,4 +1,4 @@
-﻿# Chip2Startup (C2S) Programme — Interactive Technology Showcase
+# Chip2Startup (C2S) Programme — Interactive Technology Showcase
 
 ![Chip2Startup (C2S) Programme — Ramaiah University of Applied Sciences](c2s-banner.png)
 
@@ -12,11 +12,17 @@ Supported under the national semiconductor / digital India ecosystem (MeitY · D
 
 ---
 
+## Live demo
+
+**https://semiconruas.netlify.app/**
+
+---
+
 ## What this is
 
-A **fullscreen continuous demo** that presents indigenous semiconductor, AR, AI, and medical-device work from RUAS in one looping showcase — built for live projection, kiosk display, and easy sharing via Netlify.
+A **fullscreen continuous demo** that presents indigenous semiconductor, AR, AI, and medical-device work from RUAS in one looping showcase — built for live projection and kiosk display.
 
-Open **`index.html`** (or the Netlify URL) and the presentation starts automatically.
+Open the [live site](https://semiconruas.netlify.app/) or **`index.html`** and the presentation starts automatically.
 
 ---
 
@@ -55,7 +61,7 @@ Hover the **right edge** of the screen to reveal the control panel.
 ## Run locally
 
 1. Open the project folder in a terminal.
-2. Serve the folder (required for iframes on some browsers):
+2. Serve the folder:
 
 ```bash
 python -m http.server 8765
@@ -63,30 +69,15 @@ python -m http.server 8765
 
 3. Visit http://127.0.0.1:8765/
 
-Or open `index.html` directly if your browser allows local file access.
-
----
-
-## Deploy on Netlify
-
-1. Go to https://app.netlify.com/drop
-2. Drag this entire folder onto the page
-3. Share the generated URL
-
-`netlify.toml` sets the publish directory to the site root. Entry point is **`index.html`**.
-
-**Include these assets in the upload:** all `.html` demos, `demo-loop.css`, `demo-loop.js`, `image.png`, `c2s-banner.png`, and `InShot_20260916_164134127.mp4`.
-
 ---
 
 ## Project layout
 
 ```
-├── index.html              ← Netlify / presentation entry
+├── index.html              ← presentation entry
 ├── demo-loop.html          ← redirects to index.html
 ├── demo-loop.css
 ├── demo-loop.js
-├── netlify.toml
 ├── image.png               ← RUAS logo (intro + corner)
 ├── c2s-banner.png          ← C2S programme banner
 ├── arbased.html
